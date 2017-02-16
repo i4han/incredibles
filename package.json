@@ -1,0 +1,15 @@
+{
+  "name": "incredibles",
+  "version": "0.0.9",
+  "description": "Incredible Object",
+  "main": "incredibles.js",
+  "scripts": {
+    "test": "jasmine"
+  },
+  "keywords": [
+    "object",
+    "es6"
+  ],
+  "author": "Isaac Han",
+  "license": "MIT"
+}
