@@ -1,10 +1,11 @@
 {
   "name": "incredibles",
-  "version": "0.0.17",
+  "version": "0.0.27",
   "description": "Incredible Object",
-  "main": "incredibles.js",
+  "main": "src/incredibles.js",
   "scripts": {
-    "test": "jasmine"
+    "test": "jasmine",
+    "build": "babel src --presets babel-preset-es2015 --out-dir dist"
   },
   "keywords": [
     "object",

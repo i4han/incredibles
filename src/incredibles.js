@@ -1,11 +1,12 @@
 
 'use strict'
 
-const path = require('path')
+let path = {}
 
 if ('undefined' === typeof Meteor) {
     let bypassRequire = require
-    bypassRequire('underscore2') }
+    bypassRequire('underscore2')
+    path = bypassRequire('path') }
 
 const anyIs = (answer, o, ...fn) =>
     fn.length === 0 ? answer ? true
@@ -42,6 +43,8 @@ class incObject extends Object {
         if ( __.isArray(key) ) key.map( v => delete this[v] )
         else delete this[key]
         return this  }
+    set (key, value) {
+        return this.add(key, value)  }
     add (key, value) {
         if (  __.isString(key)   &&
               key.includes('.')  &&
@@ -134,10 +137,10 @@ class incString extends String {
         return anyIs( str === this.valueOf(), this, ...fn )  }
     typeof (type, ...fn) {
         return anyTypeOf('string',  type, this, ...fn)  }
-    get val () {
-        return this.valueOf()  }
     path (...str) {
-        return in$( path.join( this.valueOf(), ...(str.map(v => v.valueOf())) ) ) }  }
+        return in$( path.join( this.valueOf(), ...(str.map(v => v.valueOf())) ) ) }
+    get val () {
+        return this.valueOf()  }  }
 
 class incNumber extends Number {
     constructor (arg) {
@@ -145,7 +148,9 @@ class incNumber extends Number {
     is (num, ...fn) {
         return anyIs( num === this.valueOf(), this, ...fn )  }
     typeof (type, ...fn) {
-        return anyTypeOf('number',  type, this, ...fn)  }  }
+        return anyTypeOf('number',  type, this, ...fn)  }
+    get val () {
+        return this.valueOf()  }  }
 
 class incBoolean extends Boolean {
     constructor (arg) {
@@ -153,16 +158,18 @@ class incBoolean extends Boolean {
     is (bool, ...fn) {
         return anyIs( bool === this.valueOf(), this, ...fn )  }
     typeof (type, ...fn) {
-        return anyTypeOf('boolean', type, this, ...fn)  }  }
+        return anyTypeOf('boolean', type, this, ...fn)  }
+    get val () {
+        return this.valueOf()  }  }
 
-function in$ (arg) {
+let in$ = arg => {
     if ( arg instanceof incObject ||
          arg instanceof incArray  ||
          arg instanceof incString ||
          arg instanceof incNumber ||
          arg instanceof incBoolean ) return arg
-    else if ( __.isObject(arg) )   return (new incObject()).add(arg)
-    else if ( __.isArray(arg) )    return (new incArray()).concat(arg)
+    else if ( __.isObject(arg) )   return (new incObject()).set(arg)
+    else if ( __.isArray(arg) )    return (new incArray()) .concat(arg)
     else if ( __.isFunction(arg) ) return arg
     else if ( __.isString(arg) )   return new incString(arg)
     else if ( __.isNumber(arg) )   return new incNumber(arg) // NaN is not here
