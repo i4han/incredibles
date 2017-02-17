@@ -1,20 +1,43 @@
 
 'use strict'
 
+const path = require('path')
+
 if ('undefined' === typeof Meteor) {
     let bypassRequire = require
     bypassRequire('underscore2') }
 
-Function.prototype.is = type => 'function' === type
+const anyIs = (answer, o, ...fn) =>
+    fn.length === 0 ? answer ? true
+                             : false :
+    fn.length === 1 ? answer ? __.isFunction(fn[0]) ? fn[0](o) : fn[0]
+                             : false :
+    fn.length === 2 ? answer ? __.isFunction(fn[0]) ? fn[0](o) : fn[0]
+                             : __.isFunction(fn[1]) ? fn[1](o) : fn[1]
+                    : console.log('error: is')
+
+const anyTypeOf = (answer, type, o, ...fn) =>
+    fn.length === 0 ? answer === type ? true
+                                      : false :
+    fn.length === 1 ? answer === type ? __.isFunction(fn[0]) ? fn[0](o) : fn[0]
+                                      : false :
+    fn.length === 2 ? answer === type ? __.isFunction(fn[0]) ? fn[0](o) : fn[0]
+                                      : __.isFunction(fn[1]) ? fn[1](o) : fn[1]
+                    : console.log('error: typeof')
+
+
+Function.prototype.typeof = (type, ...fn) => anyTypeOf('function', type, {}, ...fn)
+// Function.prototype.is = (f, ...fn) => anyIs(f.toString === this.toString, this, fn)
 
 class incObject extends Object {
     constructor (...args) {
         super(...args)  }
     keys () {
         return Object.keys(this)  }
-    is (type) {
-        return 'object' === type ? true : false }
-    equals (obj) { }
+    is (obj, ...fn) {
+        return anyIs(Object.is(this, obj), this, ...fn)  }
+    typeof (type, ...fn) {
+        return anyTypeOf( 'object', type, this, ...fn ) }
     remove (key) {
         if ( __.isArray(key) ) key.map( v => delete this[v] )
         else delete this[key]
@@ -40,12 +63,25 @@ class incObject extends Object {
         if ( this.hasOwnProperty(oldKey) ) {
             this[newKey] = this[oldKey]
             delete this[oldKey] }
-        return this }  }
+        return this }
+    fnValue (self) {
+        this.keys().forEach(  v => this[v] =
+            __.isFunction(this[v]) ? this[v](self) :
+            __.isObject(this[v])   ? in$(this[v]).fnValue(self) : this[v]  )
+        return this } }
 
 
 class incArray extends Array {
     constructor (...args) {
         super(...args)  }
+    typeof (type, ...fn) {
+        return anyTypeOf('array', type, this, ...fn) }
+    is (a, ...fn) {
+        return anyIs(  (() => {
+        if (this.length !== a.length) return false
+        for(let i = 0; i < this.length; i++)
+            if (this[i] !== a[i]) return false
+        return true  })(), this, ...fn ) }
     indexOf (f) {
         let fn
         if ( __.isFunction(f) ) fn = f
@@ -53,13 +89,10 @@ class incArray extends Array {
         for (let i = 0; i < this.length; i++)
             if ( fn(this[i], i, this) ) return i
         return -1  }
-    is (type) {
-        return 'array' === type ? true : false  }
-    equals (a) {
-        if (this.length !== a.length) return false
-        for(let i = 0; i < this.length; i++)
-            if (this[i] !== a[i]) return false
-        return true  }
+    firstValue (f) {
+        for (let i = in$(0); i < this.length; i++)
+            if ( f(in$(this[i]), i, this) ) return in$(this[i])
+        return new incBoolean(false)  }
     unique (f) {
         f = f || (v => w => v === w)
         return this.filter( (v, i) => this.indexOf( f(v, i) ) === i )  }
@@ -83,48 +116,57 @@ class incArray extends Array {
         return this.reduce((a, v, i) => {
         a[i] = f(v, b[i], i, this)
         return a }, new incArray()  )  }
-    __lastN(n, f) { // no need
-        f = f || (() => true)
-        return this.filter((v, i, a) => f(v, i, a)).slice(-n) }
-    __reduceN(n, f, f2) {
-        f2 = f2 || (() => true)
-        return this.reduce((a, v, i) => {
-        a[i] = f.apply({}, this.slice(0, i + 1).lastN(n, f2) )
-        return a }, new incArray()  )  }
+    insert (i, v) {              // if v is array?
+        this.splice(i, 0, v)
+        return this }
+    delete (i, n, v) {
+        this.splice(i, n, v)
+        return this }
     sum () {
         return this.reduce(((a,v) => a += v), 0)  }
     average () {
         return this.length ? this.sum() / this.length : NaN  }  }
 
-class incFunction extends Function {
-    constructor (arg) {
-        super(arg)  }
-    is (type) {
-        return 'function' === type  }  }
-
 class incString extends String {
     constructor (arg) {
         super(arg)  }
-    is (type) {
-        return 'string' === type  }  }
+    is (str, ...fn) {
+        return anyIs( str === this.valueOf(), this, ...fn )  }
+    typeof (type, ...fn) {
+        return anyTypeOf('string',  type, this, ...fn)  }
+    get val () {
+        return this.valueOf()  }
+    path (...str) {
+        return in$( path.join( this.valueOf(), ...(str.map(v => v.valueOf())) ) ) }  }
 
 class incNumber extends Number {
     constructor (arg) {
         super(arg)  }
-    is (type) {
-        return 'number' === type  }  }
+    is (num, ...fn) {
+        return anyIs( num === this.valueOf(), this, ...fn )  }
+    typeof (type, ...fn) {
+        return anyTypeOf('number',  type, this, ...fn)  }  }
 
 class incBoolean extends Boolean {
     constructor (arg) {
         super(arg)  }
-    is (type) {
-        return 'boolean' === type  }  }
+    is (bool, ...fn) {
+        return anyIs( bool === this.valueOf(), this, ...fn )  }
+    typeof (type, ...fn) {
+        return anyTypeOf('boolean', type, this, ...fn)  }  }
 
-
-module.exports = arg => {
-    if (  __.isObject(arg) )       return ( new incObject() ).add(arg)
-    else if ( __.isArray(arg) )    return ( new incArray()  ).concat(arg)
+function in$ (arg) {
+    if ( arg instanceof incObject ||
+         arg instanceof incArray  ||
+         arg instanceof incString ||
+         arg instanceof incNumber ||
+         arg instanceof incBoolean ) return arg
+    else if ( __.isObject(arg) )   return (new incObject()).add(arg)
+    else if ( __.isArray(arg) )    return (new incArray()).concat(arg)
     else if ( __.isFunction(arg) ) return arg
     else if ( __.isString(arg) )   return new incString(arg)
-    else if ( __.isNumber(arg) )   return new incNumber(arg)
-    else if ( __.isBoolean(arg) )  return new incBoolean(arg)  }
+    else if ( __.isNumber(arg) )   return new incNumber(arg) // NaN is not here
+    else if ( __.isBoolean(arg) )  return new incBoolean(arg)
+    else return arg } // null, undefined
+
+module.exports = in$
