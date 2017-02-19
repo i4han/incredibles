@@ -11,19 +11,25 @@ if ('undefined' === typeof Meteor) {
 const __func  = (fn, o) => __.isFunction(fn) ? fn(o) : fn
 
 const __is = (answer, o, ...fn) =>
-    fn.length === 0 ? answer ? true           : false :
-    fn.length === 1 ? answer ? __func(fn[0], o) : false :
-    fn.length === 2 ? answer ? __func(fn[0], o) : __func(fn[1], o)
+    fn.length === 0 ? answer ? true                     : false :
+    fn.length === 1 ? answer ? __func(fn[0], o) || true : false :
+    fn.length === 2 ? answer ? __func(fn[0], o) || true : __func(fn[1], o) && false
                     : console.log('error: is')
 
 const __typeof = (answer, type, o, ...fn) =>
-    fn.length === 0 ? answer === type ? true           : false :
+    fn.length === 0 ? answer === type ? true             : false :
     fn.length === 1 ? answer === type ? __func(fn[0], o) : false :
     fn.length === 2 ? answer === type ? __func(fn[0], o) : __func(fn[1], o)
                     : console.log('error: typeof')
 
+const __assign = (obj, ...prop) => {
+    prop.forEach( p => {
+    for ( let k in p ) {
+        if ( __.isObject(p[k]) ) obj[k] = __assign( {}, p[k] )
+        else obj[k] = p[k] } }  )
+    return obj  }
 
-Function.prototype.typeof = (type, ...fn) => __typeof('function', type, {}, ...fn)
+Function.prototype.typeof = (type, ...fn) => __typeof('function', type, this, ...fn)
 //Function.prototype.is = (f, ...fn) => __is(f.toString === this.toString, this, fn)
 
 class incObject extends Object {
@@ -43,23 +49,35 @@ class incObject extends Object {
         return this  }
     add (key, value) {
         return this.set(key, value)  }
-    set (key, value) {
-        if (  __.isString(key)   &&
-              key.includes('.')  &&
+    set (key, ...value) {                 // set('key', value), set('key.sub', value)
+        if (  __.isString(key)   &&       // set(['a', 1]), set(['a', 'b', 'c'], [1, 2, 3])
+              key.includes('.')  &&       // set({a:1}, {b:2}, {c:3}),
               key.indexOf('.')   &&
               key[key.length -1] !== '.'  ) {
             let re = key.match(/^([^.]+)\.(.*$)/)
             let [firstKey, restKey] = [re[1], re[2]]
-            this[firstKey] = this[firstKey] || $Object({})
-            this[firstKey].set( restKey, value )  }
-        else if ( __.isObject(key) && __.isUndefined(value) )
-            for ( let k in key )     this[k]   = key[k]  // recursive obj reference assign
-        else if ( __.isScalar(key) ) this[key] = value  // this one need to copy not reference
-        else if ( __.isArray(key)  )
-            if      ( __.isArray(value) )     key.map( (v, i) => this[v] = value[i] )
-            else if ( __.isUndefined(value) ) this[ key[0] ] = key[1]
+            this[firstKey] = $Object( this[firstKey] || {} )
+            this[firstKey].set( restKey, value[0] )
+            value.length > 1 && this.set( ...value.slice(1) )  }
+        else if ( __.isObject(key) ) {
+            __assign(this, key)  // recursive obj reference assign
+            value.length > 0 && this.set( ...value )  }
+        else if ( __.isScalar(key) ) {
+            this[key] = value[0]  // this one need to copy not reference
+            value.length > 1 && this.set( ...value.slice(1) )  }
+        else if ( __.isArray(key)  ) {
+            if      ( __.isArray(value[0]) )     key.map( (v, i) => this[v] = value[0][i] )
+            else if ( !value[0] ) this[ key[0] ] = key[1] // if value undefined, null, NaN, 0, '', false
             else console.log('set error: set(array, value)')
+            value.length > 1 && this.set( ...value.slice(1) )  }
         return this }
+    wrap () {
+        this.keys().forEach( k => __.isObject( this[k], () => this[k] = $Object(this[k]) ) && this[k].wrap )
+        return this }
+    strip () {
+        let obj = {}
+        this.keys().forEach( k => obj[k] = this[k].valueOf() ) // not finished <====**************
+        return obj  }
     rekey (oldKey, newKey) {
         if ( this.hasOwnProperty(oldKey) ) {
             this[newKey] = this[oldKey]
@@ -71,8 +89,7 @@ class incObject extends Object {
             __.isObject(this[v])   ? in$(this[v]).fnValue(self) : this[v]  )
         return this } }
 
-let $Object = v => (new incObject()).set(v)
-
+let $Object = v => v instanceof incObject ? v : (new incObject()).set(v).wrap()
 
 
 class incArray extends Array {
@@ -133,7 +150,7 @@ class incArray extends Array {
     average () {
         return this.length ? this.sum() / this.length : NaN  }  }
 
-let $Array = v => (new incArray()).concat(v)
+let $Array = v => v instanceof incArray ? v : (new incArray()).concat(v)
 
 
 
@@ -155,7 +172,7 @@ class incString extends String {
     get val () {
         return this.valueOf()  }  }
 
-let $String = v => new incString(v)
+let $String = v => v instanceof incString ? v : new incString(v)
 
 
 
@@ -171,7 +188,7 @@ class incNumber extends Number {
     get val () {
         return this.valueOf()  }  }
 
-let $Number = n => new incNumber(n)
+let $Number = v => v instanceof incNumber ? v : new incNumber(v)
 
 
 
@@ -187,7 +204,7 @@ class incBoolean extends Boolean {
     get val () {
         return this.valueOf()  }  }
 
-let $Boolean = b => new incBoolean(b)
+let $Boolean = v => v instanceof incBoolean ? v :new incBoolean(v)
 
 
 

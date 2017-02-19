@@ -9,7 +9,7 @@ describe(  "incObject", () => {
     it("1",
         () => expect(b.set('a', 4))  .toEqual(in$({a:4}))  )
     it("2",
-        () => expect(b.set('b.c', 3)).toEqual(in$({a:4,b:in$({c:3})}))  )
+        () => expect(b.set('b.c', 3)).toEqual(in$({a:4,b:{c:3}}))  )
     it("3",
         () => expect(b.remove('b'))  .toEqual(in$({a:4}))  )
     it("4",
@@ -23,7 +23,7 @@ describe(  "incObject", () => {
     it("8",
         () => expect(c.fnValue({name: 'ok'})).toEqual(in$({a:'ok'}))  )
     it("9",
-        () => expect(d.fnValue({name: 'ok'})).toEqual(in$({a:in$({b:'ok'})}))  )
+        () => expect(d.fnValue({name: 'ok'})).toEqual(in$({a:{b:'ok'}}))  )
     it("10",
         () => expect(b.set(['d', 3]))  .toEqual(in$({c:4, b:6, d:3}))  )
 })
