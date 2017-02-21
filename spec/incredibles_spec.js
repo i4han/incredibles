@@ -7,17 +7,17 @@ describe(  "incObject", () => {
     let c = in$({a: o => o.name})
     let d = in$({a:{b: v => v.name}})
     it("1",
-        () => expect(b.set('a', 4))  .toEqual(in$({a:4}))  )
+        () => expect(b.set('a', 4))    .toEqual(in$({a:4}))  )
     it("2",
-        () => expect(b.set('b.c', 3)).toEqual(in$({a:4,b:{c:3}}))  )
+        () => expect(b.dset('b.c', 3)) .toEqual(in$({a:4,b:{c:3}}))  )
     it("3",
-        () => expect(b.remove('b'))  .toEqual(in$({a:4}))  )
+        () => expect(b.remove('b'))    .toEqual(in$({a:4}))  )
     it("4",
-        () => expect(b)    .toEqual(in$({a:4}))  )
+        () => expect(b)                .toEqual(in$({a:4}))  )
     it("5",
         () => expect(b.rekey('a', 'c')).toEqual(in$({c:4}))  )
     it("6",
-        () => expect(b.set({b:6}))     .toEqual(in$({c:4, b:6}))  )
+        () => expect(b.oset({b:6}))    .toEqual(in$({c:4, b:6}))  )
     it("7",
         () => expect(b.keys())         .toEqual(['c','b'])  )
     it("8",
@@ -25,24 +25,24 @@ describe(  "incObject", () => {
     it("9",
         () => expect(d.fnValue({name: 'ok'})).toEqual(in$({a:{b:'ok'}}))  )
     it("10",
-        () => expect(b.set(['d', 3]))  .toEqual(in$({c:4, b:6, d:3}))  )
+        () => expect(b.aset(['d'], [3]))     .toEqual(in$({c:4, b:6, d:3}))  )
 })
 
 describe(  "incArray", () => {
     let a = in$([1,2,3,4,5])
     let b = in$([4,5,6,7,8])
     it("typeof",
-        () => expect(a.typeof('array'))            .toEqual(true)  )
+        () => expect(a.typeof('array'))      .toEqual(true)  )
     it("typeof",
-        () => expect(a.typeof('array', () => 21))  .toEqual(21)  )
+        () => expect(a.if(v => v.typeof('array') ).then(v => 21)._).toEqual(21)  )
     it("typeof",
-        () => expect(a.typeof('arr', () => 21, 23)).toEqual(23)  )
+        () => expect(a.if(v => v.typeof('object')).else(23)._).toEqual(23)  )
     it("finds index of a value",
         () => expect(a.indexOf(3))           .toEqual(2)  )
     it("finds index of a function",
         () => expect(a.indexOf(v => v === 4)).toEqual(3)  )
     it("finds first value that satisfy a function",
-        () => expect(a.firstValue( v => v.is(5) )).toEqual(in$(5)) )
+        () => expect(a.until( v => v.is(5) )).toEqual(in$(5)) )
     it("produces union of an array",
         () => expect(a.union(b))       .toEqual([1,2,3,4,5,6,7,8])  )
     it("produces intersection of an array",
@@ -71,32 +71,32 @@ describe(  "incString", () => {
     let s1 = in$('hello')
     let s2 = in$('world')
     it("1",
-        () => expect(s1.typeof('function'))    .toEqual(false)  )
+        () => expect(s1.typeof('function')) .toEqual(false)  )
     it("2",
-        () => expect(s1.typeof('string', 'ok')).toEqual('ok')  )
+        () => expect(s1.if(v => v.typeof('string')).then('ok')._).toEqual('ok')  )
     it("3",
-        () => expect(s1.is('hello', () => 3))  .toEqual(3)  )
+        () => expect(s1.if(v => v.is('hello')).then(() => 3)._)  .toEqual(3)  )
     it("4",
-        () => expect(s1.path('home', 'client')).toEqual('hello/home/client')  )
+        () => expect(s1.path('home', 'client').val).toEqual('hello/home/client')  )
     it("5",
-        () => expect(s1.path(s2, 'client'))    .toEqual('hello/world/client')  )
+        () => expect(s1.path(s2, 'client').val)    .toEqual('hello/world/client')  )
     it("6",
-        () => expect(s1.val)                   .toEqual('hello')  )
+        () => expect(s1.val)                       .toEqual('hello')  )
     it("7",
-        () => expect(s1.if( v => v.is('hello'), w => w + 'o', x => x + 'p' )).toEqual('helloo')  )
+        () => expect(s1.if(v => v.is('hello')).then( w => w + 'o' )._).toEqual('helloo')  )
     it("8",
-        () => expect(s1.if( v => v.is('hell' ), w => w + 'o', x => x + 'p' )).toEqual('hellop')  )
+        () => expect(s1.if(v => v.is('hell' )).else( x => x + 'p' )._).toEqual('hellop')  )
     it("10",
-        () => expect(in$('hello-world').camelize()).toEqual('helloWorld') )
+        () => expect(in$('hello-world').camelize()) .toEqual('helloWorld') )
     it("11",
-        () => expect(in$('helloWorld').dasherize()).toEqual('hello-world') )
+        () => expect(in$('helloWorld') .dasherize()).toEqual('hello-world') )
 
 })
 
 describe(  "String", () => {
     it("1",
-        () => expect('halo'.padStart(5))    .toEqual(' halo')  )
+        () => expect('halo'.padStart(5)).toEqual(' halo')  )
     it("2",
-        () => expect('halo'.padEnd(5))    .toEqual('halo ')  )
+        () => expect('halo'.padEnd(5))  .toEqual('halo ')  )
 
 })
