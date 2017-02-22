@@ -26,20 +26,25 @@ const __typeof = (answer, type, o, ...fn) =>
     fn.length === 2 ? answer === type ? __func(fn[0], o) : __func(fn[1], o)
                     : console.log('error: typeof')
 
-const __if = (o, ...fn) => {
-    fn.length === 1 ? fn[0](o) ? condition.set(o, true) : condition.set(o, false) :
-    fn.length === 2 ? fn[0](o) ? __func(fn[1], o)       : condition.set(o, false) :
-    fn.length === 3 ? fn[0](o) ? __func(fn[1], o)       : __func(fn[2], o)
-                    : console.log('error: if')
-    return o }
+const __if = (o, f) => {
+    condition.set( o, __.isFunction(f) ? !!f(o) : !!f )
+    return o  }
 
 const __then = (o, f) => {
-    condition.get(o) && __.isFunction(f) ? __func(f, o) : result.set(o, f) && f
-    return o }
+    if (condition.get(o) === true )
+        __.isFunction(f) ? __func(f, o) : result.set(o, f)
+    return o  }
 
 const __else = (o, f) => {
-    condition.get(o) || __.isFunction(f) ? __func(f, o) : result.set(o, f) && f
-    return o }
+    if (condition.get(o) === false)
+        __.isFunction(f) ? __func(f, o) : result.set(o, f)
+    return o  }
+
+const __else_if = (o, f) => {
+    if (condition.get(o) === true )
+         condition.set( o, undefined )
+    else condition.set( o, __.isFunction(f) ? !!f(o) : !!f )
+    return o  }
 
 const __return = (o, ...v) =>
     v.length === 1 ?                    __func(v[0], o) :
@@ -48,12 +53,19 @@ const __return = (o, ...v) =>
 
 const __assign = (obj, ...prop) => {
     prop.forEach( p => {
+    p = p instanceof incObject ? p.value : p
     for ( let k in p )
         obj.set(k, p[k]) })
     // {
         // if ( __.isObject(p[k]) ) obj.set( k, p[k] )
         // else obj.set( k, p[k] ) } }  )
     return obj  }
+
+const __fnValue = (o, self) => {
+    Object.keys(o).forEach( k =>
+        o[k] = __.isObject(o[k])   ? __fnValue(o[k], self) :
+               __.isFunction(o[k]) ? o[k](self)            : o[k] )
+    return o  }
 
 const __get = (o, ...keys) =>
     o instanceof incObject ?
@@ -81,9 +93,10 @@ class incObject extends Object {
         return __is(Object.is(this, obj), this, ...fn)  }
     typeof (type, ...fn) {
         return __typeof( 'object', type, this, ...fn ) }
-    if (...fn) { return __if(this, ...fn)  }
-    then (f)   { return __then(this, f)    }
-    else (f)   { return __else(this, f)    }
+    if (f)      { return __if(this, f)      }
+    then (f)    { return __then(this, f)    }
+    else (f)    { return __else(this, f)    }
+    else_if (f) { return __else_if(this, f) }
     remove (key) {
         if ( __.isArray(key) ) key.map( v => delete object.get(this)[v] )
         else delete object.get(this)[key]
@@ -104,8 +117,8 @@ class incObject extends Object {
             objFirst.dset( restKey, value )
         return this  }
     oset (...obj) {
-            __assign(this, obj[0])  // recursive obj reference assign
-            return obj.length > 1 ? this.oset( ...obj.slice(1) ) : this }
+        __assign(this, obj[0])  // recursive obj reference assign
+        return obj.length > 1 ? this.oset( ...obj.slice(1) ) : this }
     aset (key, value) {
         key.forEach( (v, i) => this.set( v, value[i] ) )
         return this  }
@@ -134,7 +147,7 @@ class incObject extends Object {
     fnValue (self) {
         this.keys().forEach(  v => this.set(  v,
             __.isFunction(this.get(v)) ? this.get(v)(self) :
-            __.isObject(  this.get(v)) ? in$(this.get(v)).fnValue(self) : this.get(v)  ))
+            __.isObject(  this.get(v)) ? __fnValue(this.get(v), self) : this.get(v)  ))
         return this  }
     hasOwnProperty (key) {
         return object.get(this).hasOwnProperty(key) }
@@ -146,10 +159,8 @@ class incObject extends Object {
         return object.get(this)  }  }
 
 let $Object = v =>
-    v instanceof incObject ? v : (() => {
-        let h = (new incObject()).init(v)//.wrap()
-        result.set(h, v)
-        return h  })()
+    v instanceof incObject ? v : (new incObject()).init(v)
+
 
 
 class incArray extends Array {
