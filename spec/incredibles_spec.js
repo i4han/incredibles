@@ -7,7 +7,7 @@ describe(  "Object$", () => {
     let c = inc.$({a: o => o.name})
     let d = inc.$({a:{b: v => v.name}})
     it("0",
-        () => expect(inc.$({a: 1}).__)      .toEqual({a:1})  )
+        () => expect(inc.$({a: 1}).__)    .toEqual({a:1})  )
     it("1",
         () => expect(b.set('a', 4).__)    .toEqual({a:4})  )
     it("2",
@@ -31,7 +31,7 @@ describe(  "Object$", () => {
     it("11",
         () => expect(b.typeof('object'))          .toEqual(true)  )
     it("12",
-        () => expect(b.typeof('object', () => 'good'))   .toEqual('good')  )
+        () => expect(b.typeof('object', () => 'good')).toEqual('good')  )
     it("13",
         () => expect(c.fnValue({name: 'ok'}).__).toEqual({a:'ok'})  )
     it("14",
