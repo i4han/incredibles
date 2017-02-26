@@ -46,10 +46,20 @@ const __else_if = (o, f) => {
     else condition.set( o, __.isFunction(f) ? !!f(o) : !!f )
     return o  }
 
-const __return = (o, ...v) =>
-    v.length === 1 ?                    __func(v[0], o) :
-    v.length === 2 ? condition.get(o) ? __func(v[0], o) : __func(v[1], o)
-                   : console.log('error: return')
+// const __return = (o, ...v) =>
+//     v.length === 1 ?                    __func(v[0], o) :
+//     v.length === 2 ? condition.get(o) ? __func(v[0], o) : __func(v[1], o)
+//                    : console.log('error: return')
+const __pipe = (o, f) => {
+    let ret
+    result.set(o, ret = f(o))
+    return ret  }
+
+const __prop = (o, ...args) => {
+    if      (args.length === 1) return property.get(o)[ args[0] ]
+    else if (args.length === 2) property.get(o)[ args[0] ] = args[1]
+    return o  }
+
 
 const __assign = (obj, ...prop) => {
     prop.forEach( p => {
@@ -61,10 +71,10 @@ const __assign = (obj, ...prop) => {
         // else obj.set( k, p[k] ) } }  )
     return obj  }
 
-const __fnValue = (o, self) => {
+const __evalProperties = (o, self) => {
     Object.keys(o).forEach( k =>
-        o[k] = __.isObject(o[k])   ? __fnValue(o[k], self) :
-               __.isFunction(o[k]) ? o[k](self)            : o[k] )
+        o[k] = __.isObject(o[k])   ? __evalProperties(o[k], self) :
+               __.isFunction(o[k]) ? o[k](self) : o[k] )
     return o  }
 
 const __get = (o, ...keys) =>
@@ -90,7 +100,8 @@ const __equal = (x, y) => {
 // String.prototype.in$ = function() { return new String$(this) }
 
 
-let object = new WeakMap()
+let object   = new WeakMap()
+let property = new WeakMap()
 
 class Map$ extends Map {
     constructor (arg) {
@@ -109,25 +120,25 @@ class Map$ extends Map {
 class Object$ extends Object {
     constructor (arg) {
         super()
-        arg instanceof Object$ ?
-            object.set(this, arg.__) :
-            object.set(this, arg || {})  }
-    // clear(), create(),  entries(), forEach(f(v, k, a)), has(key), values()
+        property.set(this, {})
+        object.set(this, arg instanceof Object$ ? arg.__: arg || {})  }
     is (obj, ...fn) {
-        return __is( __equal(object.get(this), obj),
-            object.get(this), ...fn)  }
+        return __is( __equal(this.__, obj), this.__, ...fn)  }
     typeof (type, ...fn) {
-        return __typeof( 'object', type, this, ...fn ) }
+        return __typeof( 'object', type, this, ...fn )  }
     if (f)      { return __if(this, f)      }
     then (f)    { return __then(this, f)    }
     else (f)    { return __else(this, f)    }
     else_if (f) { return __else_if(this, f) }
-    delete (key) {
-        if ( __.isArray(key) ) key.map( v => delete object.get(this)[v] )
-        else delete object.get(this)[key]
+    pipe (f)    { return __pipe(this, f)    }
+    prop (...p) { return __prop(this, ...p) }
+    delete (...keys) {
+        if ( keys.length > 1 ) keys.map( v => delete this.__[v] )
+        else delete this.__[ keys[0] ]
         return this  }
-    add (key, value) {
-        return this.set(key, value)  }
+    // __add (key, value) {
+    //     return this.set(key, value)  }
+
     set (key, value) {
         //this[key] = value Object.assign
         object.get(this)[key] = value
@@ -144,48 +155,67 @@ class Object$ extends Object {
     oset (...obj) {
         __assign(this, obj[0])  // recursive obj reference assign
         return obj.length > 1 ? this.oset( ...obj.slice(1) ) : this }
-    aset (key, value) {
+    aset (key, value) { //   aset(['a', 'b', 'c'], [1,2,3])
         key.forEach( (v, i) => this.set( v, value[i] ) )
         return this  }
-    get$ (...key) {
-        return any$( this.get(...key) ) }
+    get$ (...key) {    // for object
+        return any$( this.get(...key) )  }
     get (...key) {
-        let k = object.get(this)[key[0]]
-        // key.length > 2 && console.log(0,k,1,key.slice(1))
+        let k = object.get(this)[ key[0] ]
         return key.length > 1 ? __get(k, key.slice(1)) : k }
+    dget$ (...key) {
+        return any$( this.dget(...key) )  }
     dget (...key) {
-        // key.length > 1 && console.log(...key.join('.').split('.'))
         return this.get( ...key.join('.').split('.') )  }
-    // watch unwatch
-    keys ()     { return Object.keys( this.__ ) }
+
+    size () { return this.keys().length }
+    clear () {
+        object.set(this, {})
+        return this  }
+    has (k) {
+        return k in this.__  }
+    forEach (f) {
+        this.keys().forEach( k => f( this.get(k), k, this ) )
+        return this  }
+    map (f)    { return this.keys().map(    k => f( this.get(k), k, this ) ) }
+    filter (f) { return this.keys().filter( k => f( this.get(k), k, this ) ) }
+    reduce (f, init) {
+        let accumulator = init
+        for (let p in this.__)
+            accumulator = f( accumulator, this.get(k), k, this)
+        return accumulator  }
+    keys ()    { return Object.keys( this.__ ) }
+    values ()  {
+        return this.keys().map( k => this.get(k) )  }
+    // entries () {
+    //     return this.keys().map( k => [k, this.get(k)] )  }
+    entries ()  { return Object.entries(this.__) }
     freeze ()   { return Object.freeze(this.__) && this }
     isFrozen () { return Object.isFrozen(this.__) }
-    entries ()  { return Object.entries(this.__) }
     seal ()     { return Object.seal(this.__) && this }
-    isExtensible()          { return Object.isExtensible(this.__) }
-    getPrototypeOf()        { return Object.getPrototypeOf(this.__) }
+    isExtensible()     { return Object.isExtensible(this.__) }
+    getPrototypeOf()   { return Object.getPrototypeOf(this.__) }
     getOwnPropertyNames()   { return Object.getOwnPropertyNames(this.__) }
     getOwnPropertySymbols() { return Object.getOwnPropertySymbols(this.__) }
     getOwnPropertyDescriptor (prop) { return Object.getOwnPropertyDescriptor(this.__, prop) }
     valueOf ()   { return this.__.valueOf() }
     toString ()  { return this.__.toString() }
     unwatch (p)  { return this.__.unwatch(p) }
-    watch (p, handler)      { return this.__.watch(p, handler) }
-    hasOwnProperty (p)      { return this.__.hasOwnProperty(p) }
-    isPrototypeOf (o)       { return this.__.isPrototypeOf(o) }
+    watch (p, handler) { return this.__.watch(p, handler) }
+    hasOwnProperty (p) { return this.__.hasOwnProperty(p) }
+    isPrototypeOf (o)  { return this.__.isPrototypeOf(o) }
     propertyIsEnumerable(p) { return this.__.propertyIsEnumerable(p) }
     rekey (oldKey, newKey)  {
+        this.set( newKey, this.get(oldKey) )
         if ( this.hasOwnProperty(oldKey) ) {
-            this.set( newKey, this.get(oldKey) )
             this.delete(oldKey)  }
         return this  }
-    fnValue (self) {
-        this.keys().forEach(  v =>
-            this.set(  v,
-                __.isFunction(this.get(v)) ? this.get(v)(self) :
-                __.isObject(  this.get(v)) ? __fnValue(this.get(v), self) : this.get(v)  ))
+    evalProperties (self) { // evaluateFunctionProperties evaluateProperties
+        this.forEach(  (v,k) => this.set(  k,
+            __.isFunction(v) ? v(self) :
+            __.isObject(v)   ? __evalProperties(v, self) : v  ))
         return this  }
-    //get size () {}
+    valueOf ()       { return this.__  }
     get result ()    { return result.get(this)  }
     get condition () { return condition.get(this)  }
     get __ ()        { return object.get(this)  }  }
@@ -195,23 +225,21 @@ class Object$ extends Object {
 class Array$ extends Array {
     constructor (arg) {
         super()
+        property.set(this, {})
         let value = arg instanceof Array$ ? arg.__ : arg
         if (value)
             for(let i = 0; i < value.length; i++)
                 this[i] = arg[i]  }
     is (a, ...fn) {
-        return __is(  (() => {
-            if (this.length !== a.length) return false
-            for(let i = 0; i < this.length; i++)
-                if (this[i] !== a[i]) return false
-            return true  })(), this, ...fn ) }
+        return __is(  __equal(this.__, a.valueOf() ), this, ...fn ) }
     typeof (type, ...fn) {
         return __typeof('array', type, this, ...fn) }
-    if   (f)    { return __if  (this, f)  }
-    then (f)    { return __then(this, f)  }
-    else (f)    { return __else(this, f)  }
-    else_if (f) { return __else_if(this, f)  }
-    // pipe
+    if   (f)    { return __if  (this, f)    }
+    then (f)    { return __then(this, f)    }
+    else (f)    { return __else(this, f)    }
+    else_if (f) { return __else_if(this, f) }
+    pipe (f)    { return __pipe(this, f)    }
+    prop (...p) { return __prop(this, ...p) }
     get (i) {
         return this[i]  }
     set (i, v) {
@@ -223,10 +251,8 @@ class Array$ extends Array {
         for (let i = 0; i < this.length; i++)
             if ( fn(this[i], i, this) ) return i
         return -1  }
-    until (f) { // find
-        for (let i = 0; i < this.length; i++)
-            if ( f(this[i], i, this) ) return this[i]
-        return new Boolean$(false)  }
+    find$ (f) {
+        return any$( this.find(f) )  }
     shift$ () {
         this.shift()
         return this  }
@@ -239,18 +265,18 @@ class Array$ extends Array {
     // splice (...args) { return Array$(object.get(this).splice (...args)) }
     unique (f) {
         f = f || (v => w => v === w)
-        return this.filter( (v, i) => this.indexOf( f(v, i) ) === i )  }
+        return this.filter( (v, i) => this.findIndex( f(v, i) ) === i )  }
     intersection (b, f) {
         let bIndex
         f = f || (v => w => v === w)
         return this.reduce(  ((a, v, i) => {
-            if ( ( bIndex = b.indexOf( f(v, i) ) ) !== -1 )
+            if ( ( bIndex = b.findIndex( f(v, i) ) ) !== -1 )
                 return a.concat(
                     __.isObject(v) ? v.set( b[bIndex] ) : v )
             else return a  }), new Array$()  )  }
     difference (b, f) {
         f = f || (v => w => v === w)
-        return this.filter( (v, i) => b.indexOf( f(v, i) ) === -1 )  }
+        return this.filter( (v, i) => b.findIndex( f(v, i) ) === -1 )  }
     union (b, f) {
         f = f || (v => w => v === w)
         return this.difference(b, f)
@@ -261,36 +287,58 @@ class Array$ extends Array {
         return this.reduce((a, v, i) => {
         a[i] = f(v, b[i], i, this)
         return a }, new Array$()  )  }
-    insert (i, v) {              // if v is array?
-        this.splice(i, 0, v)
+    insert (i, ...v) {              // if v is array?
+        this.splice(i, 0, ...v)
         return this }
-    delete (i, n, v) {
-        this.splice(i, n, v)
+    delete (i, n, ...v) {
+        this.splice(i, n, ...v)
         return this }
     sum (f) {
         f = f || (v => v)
         return this.reduce(((a,v) => a += f(v)), 0)  }
     average (f) {
         return this.sum(f) / this.length  }
+    valueOf () { return this.__ }
     get result ()    { return result.get(this)  }
     get condition () { return condition.get(this)  }
     get __ ()        { return Array.from(this)  }  }
 
 
 // let Array$ = v => v instanceof Array$ ? v : new Array$(v)//.concat(v)
+class Function$ extends Function {
+    constructor (arg) {
+        super()
+        property.set(this, {})
+        object.set(this, arg)  }
+    typeof (type, ...fn) {
+        return __typeof('function',  type, this, ...fn)  }
+    if (f)      { return __if(this, f)      }
+    then (f)    { return __then(this, f)    }
+    else (f)    { return __else(this, f)    }
+    else_if (f) { return __else_if(this, f) }
+    pipe (f)    { return __pipe(this, f)    }
+    prop (...p) { return __prop(this, ...p) }
 
+    get result ()    { return result.get(this)  }
+    get condition () { return condition.get(this)  }
+    get __ ()        { return object.get(this)  }  }
 
 
 class String$ extends String {
     constructor (arg) {
-        super(arg instanceof String$ ? arg.__ : arg)  }
+        super(arg instanceof String$ ? arg.__ : arg)
+        property.set(this, {})  }
     is (str, ...fn) {
         return __is( str.valueOf() === this.__, this, ...fn )  }
     typeof (type, ...fn) {
         return __typeof('string',  type, this, ...fn)  }
-    if (...fn) { return __if(this, ...fn)  }
-    then (f)   { return __then(this, f)    }
-    else (f)   { return __else(this, f)    }
+    if (f)      { return __if(this, f)      }
+    then (f)    { return __then(this, f)    }
+    else (f)    { return __else(this, f)    }
+    else_if (f) { return __else_if(this, f) }
+    pipe (f)    { return __pipe(this, f)    }
+    prop (...p) { return __prop(this, ...p) }
+
     path (...str) {
         return new String$( path.join( this.__, ...(str.map(v => v.valueOf())) ) ) }
     camelize () {
@@ -307,14 +355,19 @@ class String$ extends String {
 
 class Number$ extends Number {
     constructor (arg) {
-        super(arg instanceof Number$ ? arg.__ : arg)  }
+        super(arg instanceof Number$ ? arg.__ : arg)
+        property.set(this, {})  }
     is (num, ...fn) {
         return __is( num.valueOf() === this.__, this, ...fn )  }
     typeof (type, ...fn) {
         return __typeof('number',  type, this, ...fn)  }
-    if   (f)   { return __if(this, f)  }
-    then (f)   { return __then(this, f)    }
-    else (f)   { return __else(this, f)    }
+    if   (f)    { return __if(  this, f)    }
+    then (f)    { return __then(this, f)    }
+    else (f)    { return __else(this, f)    }
+    else_if (f) { return __else_if(this, f) }
+    pipe (f)    { return __pipe(this, f)    }
+    prop (...p) { return __prop(this, ...p) }
+
     get result ()    { return result.get(this)  }
     get condition () { return condition.get(this)  }
     get __ ()        { return this.valueOf()  }  }
@@ -325,54 +378,108 @@ class Number$ extends Number {
 
 class Boolean$ extends Boolean {
     constructor (arg) {
-        super(arg instanceof Boolean$ ? arg.__ : arg)  }
+        super(arg instanceof Boolean$ ? arg.__ : arg)
+        property.set(this, {})  }
     is (bool, ...fn) {
         return __is( bool.valueOf() === this.__, this, ...fn )  }
     typeof (type, ...fn) {
         return __typeof('boolean', type, this, ...fn)  }
-    if (...fn) { return __if(this, ...fn)  }
-    then (f)   { return __then(this, f)    }
-    else (f)   { return __else(this, f)    }
+    if   (f)    { return __if(  this, f)    }
+    then (f)    { return __then(this, f)    }
+    else (f)    { return __else(this, f)    }
+    else_if (f) { return __else_if(this, f) }
+    pipe (f)    { return __pipe(this, f)    }
+    prop (...p) { return __prop(this, ...p) }
+
     get result ()    { return result.get(this)  }
     get condition () { return condition.get(this)  }
     get __ ()        { return this.valueOf()  }  }
 
 // let Boolean$ = v => v instanceof Boolean$ ? v :new Boolean$(v)
+class Date$ extends Date {
+    constructor (arg) {
+        super(arg)
+        property.set(this, {})  }
+    is (v, ...fn) {
+        return __is( Object.is(v, this.__), this, ...fn )  }
+    typeof (type, ...fn) {
+        return __typeof('date', type, this, ...fn)  }
+    if   (f)    { return __if(  this, f)    }
+    then (f)    { return __then(this, f)    }
+    else (f)    { return __else(this, f)    }
+    else_if (f) { return __else_if(this, f) }
+    pipe (f)    { return __pipe(this, f)    }
+    prop (...p) { return __prop(this, ...p) }
 
-let any$ = arg => {
-    if ( __.isFunction(arg) ) return arg
-    else if ( __.isObject (arg) )  return new Object$ (arg)
-    else if ( __.isArray  (arg) )  return new Array$  (arg)
-    else if ( __.isString (arg) )  return new String$ (arg)
-    else if ( __.isNumber (arg) )  return new Number$ (arg) // NaN is not here
-    else if ( __.isBoolean(arg) )  return new Boolean$(arg)
-    else return arg } // null, undefined
 
-module.exports = prop => {
+}
+class Variable {
+    constructor (arg) {
+        this.value = arg
+        property.set(this, {})  }
+    is (v, ...fn) {
+        return __is( Object.is(v, this.value), this, ...fn )  }
+    typeof (type, ...fn) {
+        return __typeof('variable', type, this, ...fn)  }
+    if   (f)    { return __if(  this, f)    }
+    then (f)    { return __then(this, f)    }
+    else (f)    { return __else(this, f)    }
+    else_if (f) { return __else_if(this, f) }
+    pipe (f)    { return __pipe(this, f)    }
+    prop (...p) { return __prop(this, ...p) }
 
-    if (prop) {
-        Object.defineProperty(String.prototype,  prop, {
-            enumerable:   false,
-            configurable: true,
-            get: function () { return new String$ (this) }  }  )
-        Object.defineProperty(Array.prototype,   prop, {
-            enumerable:   false,
-            configurable: true,
-            get: function () { return new Array$  (this) }  }  )
-        Object.defineProperty(Number.prototype,  prop, {
-            enumerable:   false,
-            configurable: true,
-            get: function () { return new Number$ (this) }  }  )
-        Object.defineProperty(Boolean.prototype, prop, {
-            enumerable:   false,
-            configurable: true,
-            get: function () { return new Boolean$(this) }  }  )  }
-    prop = prop || '$'
-    return {
-       [prop]:    any$
-      , Map$:     Map$
-      , Object$:  Object$
-      , Array$:   Array$
-      , String$:  String$
-      , Number$:  Number$
-      , Boolean$: Boolean$  }  }
+    get result ()    { return result.get(this)  }
+    get condition () { return condition.get(this)  }
+    get __ () { return this.value }  }
+
+
+let any$ = v => {
+    if ( v instanceof Date )     return new Date$    (v)
+    else if ( __.isFunction(v) ) return new Function$(v)
+    else if ( __.isObject  (v) ) return new Object$  (v)
+    else if ( __.isArray   (v) ) return new Array$   (v)
+    else if ( __.isString  (v) ) return new String$  (v)
+    else if ( __.isNumber  (v) ) return new Number$  (v) // NaN is not here
+    else if ( __.isBoolean (v) ) return new Boolean$ (v)
+    else if ( undefined === v || null === v || Object.is(NaN, v) )
+        return new Variable(v) // null, undefined, NaN,
+    else return v  }
+
+let prop = '$'
+if (prop) {
+    Object.defineProperty(  Function.prototype, prop, {
+        enumerable:   false
+      , configurable: true
+      , get: function () { return new Function$(this) }  })
+    Object.defineProperty(  String.prototype,   prop, {
+        enumerable:   false
+      , configurable: true
+      , get: function () { return new String$  (this) }  })
+    Object.defineProperty(  Array.prototype,    prop, {
+        enumerable:   false
+      , configurable: true
+      , get: function () { return new Array$   (this) }  })
+    Object.defineProperty(  Date.prototype,     prop, {
+        enumerable:   false
+      , configurable: true
+      , get: function () { return new Date$    (this) }  })
+    Object.defineProperty(  Number.prototype,   prop, {
+        enumerable:   false
+      , configurable: true
+      , get: function () { return new Number$  (this) }  })
+    Object.defineProperty(  Boolean.prototype,  prop, {
+        enumerable:   false
+      , configurable: true
+      , get: function () { return new Boolean$ (this) }  })  }
+
+module.exports = {
+        $:     any$
+      , Map$:      Map$
+      , Object$:   Object$
+      , Array$:    Array$
+      , Function$: Function$
+      , Date$:     Date$
+      , String$:   String$
+      , Number$:   Number$
+      , Boolean$:  Boolean$
+      , Variable:  Variable  }
