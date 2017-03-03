@@ -684,6 +684,7 @@ if (prop) {
 
 let exported = {
     $:         any$
+  , from:      any$
   , Map$:      Map$
   , Object$:   Object$
   , Array$:    Array$
