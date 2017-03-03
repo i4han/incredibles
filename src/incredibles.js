@@ -2,7 +2,8 @@
 'use strict'
 
 require('./polyfill.js')
-let path = {}
+
+let path, fs
 
 if ('undefined' === typeof Meteor) {
     let bypassRequire = require
@@ -55,9 +56,29 @@ const __pipe = (o, f) => {
     result.set(o, ret = f(o))
     return ret  }
 
-const __prop = (o, ...args) => {
-    if      (args.length === 1) return property.get(o)[ args[0] ]
-    else if (args.length === 2) property.get(o)[ args[0] ] = args[1]
+const __prop = (o, ...args) => { // property { writable: true watch: f(k, oval, nval) value: }
+    let key = args[0]
+    let obj = property.get(o)
+    if   (args.length === 1)
+        return obj[key] ? obj[key].value : undefined
+    else if (args.length === 2) {
+        let value  = args[1]
+        if ( undefined === obj )
+            property.set( o, {[key]: {value: value, writable: true}} )
+        else if ( undefined === obj[key] )
+            obj[key] = {value: value, writable: true}
+        else if ( obj[key].writable !== false ) {
+            obj[key].watch && obj[key].watch(key, obj[key].value, value)
+            obj[key].value = value  }
+        else consosle.log('write protected') }
+    return o  }
+
+const __propWatch = (o, p, w) => {
+    property.get(o)[p].watch = w
+    return o  }
+
+const __propWritable = (o, p, w) => {
+    property.get(o)[p].writable = w
     return o  }
 
 
@@ -71,29 +92,49 @@ const __assign = (obj, ...prop) => {
         // else obj.set( k, p[k] ) } }  )
     return obj  }
 
-const __evalProperties = (o, self) => {
+const __evaluateProperties = (o, self) => {
     Object.keys(o).forEach( k =>
-        o[k] = __.isObject(o[k])   ? __evalProperties(o[k], self) :
+        o[k] = __.isObject(o[k])   ? __evaluateProperties(o[k], self) :
                __.isFunction(o[k]) ? o[k](self) : o[k] )
     return o  }
 
 const __get = (o, ...keys) =>
     o instanceof Object$ ?
-        keys.length === 1 ? o.get(keys[0]) : __get( o.get(keys[0]), keys.slice(1) ) :
-        keys.length === 1 ? o[keys[0]]     : __get( o[keys[0]], keys.slice(1) )
+        keys.length === 1 ? o.get(keys[0]) : __get( o.get(keys[0]), ...keys.slice(1) ) :
+        keys.length === 1 ? o[keys[0]]     : __get( o[keys[0]],     ...keys.slice(1) )
 
 const __set = (o, k, v) =>
     o instanceof Object$ ? o.set(k, v) : o[k] = v
 
 const __equal = (x, y) => {
-    if ( x === y ) return true
-    if ( x.constructor !== y.constructor ) return false
-    if ( Object.keys(x).length !== Object.keys(y).length ) return false
-    for (let p in x) {
-        if ( Object.is(x[p], y[p]) ) continue
-        if ( "object" !== typeof x[p] || "object" !== typeof y[p] ) return false
-        if ( ! __equal(x[p], y[p]) ) return false  }
+    if ( Object.is(x, y) ) return true
+    if ( 'object' !== typeof y || 'object' !== typeof x ||
+        x.constructor !== y.constructor ||
+        Object.keys(x).length !== Object.keys(y).length ) return false
+    for (let p in x)
+        if ( ! __equal(x[p], y[p]) ) return false
     return true  }
+
+const __log = (o, ...args) => {
+    if (args.length > 1) console.log( ...args, o.__ )
+    else if (args.length === 1)
+        if ('function' === typeof args[0]) console.log( args[0](o) )
+        else console.log( args[0], o.__ )
+    else console.log( o.__ )
+    return o   }
+
+const __recursive = (o, f) => {
+    f(o)
+    for (let p in o.__) {
+        if ( __.isObject(o.__[p]) )
+            __recursive( new Object$(o.__[p]), f )
+        if ( __.isArray(o.__[p]) )
+            for ( let q in o.__[p] )
+                if ( __.isObject( o.__[p][q] ) )
+                    __recursive( new Object$(o.__[p][q]), f )  }
+    return o  }
+
+
 
 // Function.prototype.typeof = (type, ...fn) => __typeof('function', type, this, ...fn)
 // Function.prototype.is = (f, ...fn) => __is(f.toString === this.toString, this, fn)
@@ -110,6 +151,8 @@ class Map$ extends Map {
         return __typeof( 'map', type, this, ...fn )  }
 }
 
+let bind     = new Map$()
+
 /**
  * @class {Object$}
  * @example in$({a:1, b:2, c:3}).keys() => ['a', 'b', 'c']
@@ -120,7 +163,7 @@ class Map$ extends Map {
 class Object$ extends Object {
     constructor (arg) {
         super()
-        property.set(this, {})
+        property.set(this, {}) // Yes. arg can be an array.
         object.set(this, arg instanceof Object$ ? arg.__: arg || {})  }
     is (obj, ...fn) {
         return __is( __equal(this.__, obj), this.__, ...fn)  }
@@ -131,7 +174,24 @@ class Object$ extends Object {
     else (f)    { return __else(this, f)    }
     else_if (f) { return __else_if(this, f) }
     pipe (f)    { return __pipe(this, f)    }
+    log (...f)  { return __log(this, ...f)  }
     prop (...p) { return __prop(this, ...p) }
+    propWatch    (p, f) { return __propWatch(this, p, f)    }
+    propWritable (p, f) { return __propWritable(this, p, f) }
+    backup (...p)  {
+        p.forEach(  v =>
+            __prop(this, '@prop:' + v, this.dget(v) )  )
+        return this  }
+    restore (...p) {
+        p.forEach(  v =>
+            this.dset( v, __prop(this, '@prop:' + v) )  )
+        return this  }
+    remove (...p)  {
+        p.forEach(  v =>
+            this.backup(v).delete(v)  )
+        return this  }
+    restoreAll () { return this.restore( ...this.keys() ) }
+    removeAll ()  { return this.remove ( ...this.keys() ) }
     delete (...keys) {
         if ( keys.length > 1 ) keys.map( v => delete this.__[v] )
         else delete this.__[ keys[0] ]
@@ -144,25 +204,32 @@ class Object$ extends Object {
         object.get(this)[key] = value
         return this  }
     dset (key, value) {
-        let re = key.match(/^([^.]+)\.(.*$)/)
-        let [firstKey, restKey] = [re[1], re[2]]
-        let objFirst = this.get(firstKey)
-        objFirst = this.set(firstKey, objFirst || {}).get$(firstKey)
-        restKey.indexOf('.') === -1 ?
-            __set ( objFirst, restKey, value ) :
-            objFirst.dset( restKey, value )
+        if (key.indexOf('.') === -1) return this.set(key, value)
+        let k = key.split('.')
+
+        let o0 = this.get(k[0])
+        o0 = this.set(k[0], o0 ||
+            (Number(k[1]).toString() === k[1] ? [] : {}) ).get(k[0])
+        o0 = new Object$(o0)
+        k.length === 2 ?
+            __set (o0, k[1], value) : o0.dset(k.slice(1).join('.'), value)
         return this  }
-    oset (...obj) {
+    oset (...obj) {  // assign
         __assign(this, obj[0])  // recursive obj reference assign
         return obj.length > 1 ? this.oset( ...obj.slice(1) ) : this }
     aset (key, value) { //   aset(['a', 'b', 'c'], [1,2,3])
         key.forEach( (v, i) => this.set( v, value[i] ) )
         return this  }
+    setWhenUndefined (key, value) {
+        this.dget(key) === 'undefined' && this.dset(key, value)
+        return this}
+
     get$ (...key) {    // for object
         return any$( this.get(...key) )  }
     get (...key) {
+        // key.length > 3 & console.log(0, object.get(this))
         let k = object.get(this)[ key[0] ]
-        return key.length > 1 ? __get(k, key.slice(1)) : k }
+        return key.length > 1 ? __get(k, ...key.slice(1)) : k  }
     dget$ (...key) {
         return any$( this.dget(...key) )  }
     dget (...key) {
@@ -187,8 +254,11 @@ class Object$ extends Object {
     keys ()    { return Object.keys( this.__ ) }
     values ()  {
         return this.keys().map( k => this.get(k) )  }
+    // MVCObject bindto, addListener, changed, notify
     // entries () {
     //     return this.keys().map( k => [k, this.get(k)] )  }
+
+    assign (...o)  { return Object.assign(this.__, ...o) }
     entries ()  { return Object.entries(this.__) }
     freeze ()   { return Object.freeze(this.__) && this }
     isFrozen () { return Object.isFrozen(this.__) }
@@ -205,31 +275,121 @@ class Object$ extends Object {
     hasOwnProperty (p) { return this.__.hasOwnProperty(p) }
     isPrototypeOf (o)  { return this.__.isPrototypeOf(o) }
     propertyIsEnumerable(p) { return this.__.propertyIsEnumerable(p) }
+
     rekey (oldKey, newKey)  {
         this.set( newKey, this.get(oldKey) )
-        if ( this.hasOwnProperty(oldKey) ) {
-            this.delete(oldKey)  }
+        if ( this.hasOwnProperty(oldKey) ) this.delete(oldKey)
         return this  }
-    evalProperties (self) { // evaluateFunctionProperties evaluateProperties
+    recursive (f) {
+        return __recursive(this, f)  }
+    copy$ (o)   {
+        o = o || {}
+        return new Object( Object.assign(o, this.__, Object.assign({}, o)) )  }
+    stringify$ (...args) { return new String$( JSON.stringify(this.__, ...args) ) }
+    evaluateProperties (self) { // evaluateProperties evaluateProperties
         this.forEach(  (v,k) => this.set(  k,
             __.isFunction(v) ? v(self) :
-            __.isObject(v)   ? __evalProperties(v, self) : v  ))
+            __.isObject(v)   ? __evaluateProperties(v, self) : v  ))
         return this  }
     valueOf ()       { return this.__  }
     get result ()    { return result.get(this)  }
     get condition () { return condition.get(this)  }
     get __ ()        { return object.get(this)  }  }
 
-// let Object$ = v => v instanceof Object$ ? v : new Object$(v)
+const xmlObject = o => {
+    let value = {}
+    for (let p in o) {
+        if (p[0] === '$') {
+            value.$ = value.$ || {}
+            value.$[ p.slice(1) ] = o[p]  }
+        else if (__.isObject(o[p]))
+            value[p] = [xmlObject( o[p] )]
+        else
+            value[p] = [o[p].toString()] }
+    return value  }
+
+
+class XmlValue extends Object$ {
+    constructor (arg) {
+        super(arg)
+        object.set(this, arg instanceof Object$ ? arg.__: arg || {})
+            }
+    value (...p) {
+        // console.log(10, this.__)
+        // console.log(...p.join('.').split('.').reduce( (a,v) => a.concat(v, 0), [] ) )
+        return this.dget( ...p.join('.').split('.').reduce( (a,v) => a.concat(v, 0), [] ))  }
+    toSet (...p) {
+        return [ this.value(...p) ]  }
+}
+
+
+class Xml extends Object$ {
+    constructor (arg) {
+        const stepIn = o => {
+            let keys = Object.keys(o)
+            if (keys.length === 1)
+                return stepIn( o[keys[0]] )
+            else (keys.length === 2)
+                if (keys[0] === '$')
+                    return stepIn( o[keys[1]] )
+                else if (keys[1] === '$')
+                    return stepIn( o[keys[0]] )
+            return o  }
+        super(arg)
+        this.prop('@root', new Object$( stepIn(this.__) ))
+    }
+    root (p) {
+        const findRoot = (o, prop) => {
+            let keys = Object.keys(o)
+            if (keys.length === 1)
+                return keys[0] === prop ? o[keys[0]] : findRoot( o[keys[0]], prop )
+            else (keys.length === 2)
+                if (keys[0] === '$')
+                    return keys[1] === prop ? o[keys[1]] : findRoot( o[keys[1]], prop )
+                else if (keys[1] === '$')
+                    return keys[0] === prop ? o[keys[0]] : findRoot( o[keys[0]], prop )
+            return o  }
+        let root = findRoot(this.__, p)[0]
+        this.prop('@root', new Object$(root))
+        return this  }
+    insert (obj) {
+        this.prop('@root').oset( xmlObject(obj) )
+        return this  }
+    removeElement (p) {
+        this.prop('@root').remove(p)
+        return this  }
+    restoreElement (p) {
+        this.prop('@root').restore(p)
+        return this  }
+    findEvery (p, f) {
+        const element = (o, prop) => {
+            for (let i = 0; i < o.length; i++) {
+                if ( ! __.isObject(o[i]) ) continue
+                for (let q in o[i])
+                    if (q === prop)
+                        for (let r in o[i][q]) {
+                            if ( ! __.isObject(o[i][q][r]) ) continue
+                            f( new Object$(o[i][q][r]), new Object$(o[i]) )  }
+                    else if (q !== '$') element( o[i][q], prop )  }  }
+        element([this.prop('@root').__], p)
+        return this  }
+    insertEvery (p, obj) {
+        return this.findEvery( p, v => v.oset(xmlObject( obj )) ) }
+    removeEvery (p) {
+        return this.findEvery( p, (v, w) => w.delete(p) )  }
+}
+
+//{Style: {"$id": "pline", LineStyle:{color: "ff00ff", width: 4} } }
 
 class Array$ extends Array {
     constructor (arg) {
         super()
-        property.set(this, {})
-        let value = arg instanceof Array$ ? arg.__ : arg
+        property.set(this, {}) // write error if arg is object.
+        let value = arg instanceof Array$ ? arg.__ : arg || []
+        this.prop('value', value)
         if (value)
             for(let i = 0; i < value.length; i++)
-                this[i] = arg[i]  }
+                this[i] = value[i]  }
     is (a, ...fn) {
         return __is(  __equal(this.__, a.valueOf() ), this, ...fn ) }
     typeof (type, ...fn) {
@@ -239,27 +399,55 @@ class Array$ extends Array {
     else (f)    { return __else(this, f)    }
     else_if (f) { return __else_if(this, f) }
     pipe (f)    { return __pipe(this, f)    }
-    prop (...p) { return __prop(this, ...p) }
+    prop (...p) { return __prop(this, ...p) }    // ... is to tell between prop('p', undefined) or prop('p')
+    propFn (p, f) { return __prop(this, p, f(this)) }
+    propWatch    (p, f)  { return __propWatch(this, p, f)    }
+    propWritable (p, b)  { return __propWritable(this, p, b) }
+    propDefaultOrGet (p, _default) {
+        return undefined === _default ? this.prop(p) : _default  }
+
+    log (...f)  { return __log(this, ...f)  }
+
     get (i) {
         return this[i]  }
     set (i, v) {
         return this[i] = v  }
-    indexOf (f) { // findIndex
+    update () {
+        let origin_arg = this.prop('value')
+        origin_arg.length = 0
+        for(let i = 0; i < this.length; i++)
+            origin_arg[i] = this[i]
+        return this  }
+    __indexOf (f) { // findIndex
         let fn
         if ( __.isFunction(f) ) fn = f
         else fn = arg => arg === f
         for (let i = 0; i < this.length; i++)
             if ( fn(this[i], i, this) ) return i
         return -1  }
+
     find$ (f) {
         return any$( this.find(f) )  }
-    shift$ () {
+    push$ (...arg) {
+        this.push(...arg)
+        return this  }
+    pop$ () {
+        this.pop()
+        return this  }
+    shift$ (...v) {
+        'undefined' !== typeof v && this.push(...v)
         this.shift()
         return this  }
+    unshift$ (...v) {
+        this.unshift(...v)
+        return this  }
+    reduce$ (f, initialValue) {
+        initialValue = this.propDefaultOrGet('initialValue', initialValue)
+        return any$( this.reduce(f, initialValue) )  }
     // map    (...args) { return Array$(object.get(this).map    (...args)) }
     // forEach(...args) { return Array$(object.get(this).forEach(...args)) }
     // filter (...args) { return Array$(object.get(this).filter (...args)) }
-    // reduce (...args) { return in$   (object.get(this).reduce (...args)) }
+
     // concat (...args) { return Array$(object.get(this).concat (...args)) }
     // slice  (...args) { return Array$(object.get(this).slice  (...args)) }
     // splice (...args) { return Array$(object.get(this).splice (...args)) }
@@ -318,6 +506,7 @@ class Function$ extends Function {
     else_if (f) { return __else_if(this, f) }
     pipe (f)    { return __pipe(this, f)    }
     prop (...p) { return __prop(this, ...p) }
+    log (...f)  { return __log(this, ...f)  }
 
     get result ()    { return result.get(this)  }
     get condition () { return condition.get(this)  }
@@ -339,12 +528,18 @@ class String$ extends String {
     pipe (f)    { return __pipe(this, f)    }
     prop (...p) { return __prop(this, ...p) }
 
-    path (...str) {
+    path (...str) { // path$
         return new String$( path.join( this.__, ...(str.map(v => v.valueOf())) ) ) }
+    require$ () {
+        return new Object$( require(this.__) )  }
     camelize () {
         return this.replace( /-([a-z])/g, (_, $1) => $1.toUpperCase() ) }
     dasherize () {
         return this.replace( /([A-Z])/g,  $1 => '-' + $1.toLowerCase() ) }
+    parseJson$ () {
+        return new Object$( JSON.parse(this.__) )
+    }
+    log (...f)       { return __log(this, ...f) }
     get result ()    { return result.get(this)  }
     get condition () { return condition.get(this)  }
     get __ ()        { return this.valueOf()  }  }
@@ -367,6 +562,7 @@ class Number$ extends Number {
     else_if (f) { return __else_if(this, f) }
     pipe (f)    { return __pipe(this, f)    }
     prop (...p) { return __prop(this, ...p) }
+    log (...f)  { return __log(this, ...f)  }
 
     get result ()    { return result.get(this)  }
     get condition () { return condition.get(this)  }
@@ -390,6 +586,7 @@ class Boolean$ extends Boolean {
     else_if (f) { return __else_if(this, f) }
     pipe (f)    { return __pipe(this, f)    }
     prop (...p) { return __prop(this, ...p) }
+    log (...f)  { return __log(this, ...f)  }
 
     get result ()    { return result.get(this)  }
     get condition () { return condition.get(this)  }
@@ -410,9 +607,16 @@ class Date$ extends Date {
     else_if (f) { return __else_if(this, f) }
     pipe (f)    { return __pipe(this, f)    }
     prop (...p) { return __prop(this, ...p) }
-
+    log (...f)  { return __log(this, ...f)  }
 
 }
+
+class Buffer$ extends Buffer {
+    constructor (arg) {
+        super(arg)
+        property.set(this, {})  }
+}
+
 class Variable {
     constructor (arg) {
         this.value = arg
@@ -427,10 +631,11 @@ class Variable {
     else_if (f) { return __else_if(this, f) }
     pipe (f)    { return __pipe(this, f)    }
     prop (...p) { return __prop(this, ...p) }
+    log (...f)  { return __log(this, ...f)  }
 
     get result ()    { return result.get(this)  }
     get condition () { return condition.get(this)  }
-    get __ () { return this.value }  }
+    get __ ()        { return this.value }  }
 
 
 let any$ = v => {
@@ -470,16 +675,50 @@ if (prop) {
     Object.defineProperty(  Boolean.prototype,  prop, {
         enumerable:   false
       , configurable: true
-      , get: function () { return new Boolean$ (this) }  })  }
+      , get: function () { return new Boolean$ (this) }  })
+    Object.defineProperty(  Buffer.prototype,   prop, {
+        enumerable:   false
+      , configurable: true
+      , get: function () { return new String$ (this.toString()) }  })  }
 
-module.exports = {
-        $:     any$
-      , Map$:      Map$
-      , Object$:   Object$
-      , Array$:    Array$
-      , Function$: Function$
-      , Date$:     Date$
-      , String$:   String$
-      , Number$:   Number$
-      , Boolean$:  Boolean$
-      , Variable:  Variable  }
+
+let exported = {
+    $:         any$
+  , Map$:      Map$
+  , Object$:   Object$
+  , Array$:    Array$
+  , Function$: Function$
+  , Date$:     Date$
+  , String$:   String$
+  , Number$:   Number$
+  , Boolean$:  Boolean$
+  , Variable:  Variable
+  , Xml:       Xml
+  , map:       v => new Map$(v)
+  , function:  v => new Function$(v)
+  , date:      v => new Date$(v)
+  , object:    v => new Object$(v)
+  , array:     v => new Array$(v)
+  , string:    v => new String$(v)
+  , number:    v => new Number$(v)
+  , boolean:   v => new Boolean$(v)
+  , xml:       v => new Xml(v)
+  , xmlValue:  v => new XmlValue(v)
+}
+
+let meteor = {}
+meteor.queryString = o => new Object$(o)
+    .pipe(  v => v.get$('query')
+        .map( (w,k) => encodeURIComponent(k) + "=" + encodeURIComponent(w) )
+        .join( v.__.delimeter || '&' )  )
+meteor.getUrlfromSettings = p => {
+    console.log(0, new Object$(__._Settings))
+    return new Object$(__._Settings).dget$(p)
+    .pipe( v => v.__.url + '?' + meteor.queryString(v.__.options) ) }
+
+
+// if ('undefined' !== typeof Meteor)
+exported.meteor = meteor
+
+
+module.exports  = exported

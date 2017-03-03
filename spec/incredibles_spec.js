@@ -16,22 +16,28 @@ describe(  "Object$", () => {
         () => expect(b.dset('b.c', 3).__) .toEqual({a:4,b:{c:3}})  )
     it("delete",
         () => expect(b.delete('b').__)    .toEqual({a:4})  )
-    it("__",
-        () => expect(b.__)                .toEqual({a:4})  )
+    it("clear",
+        () => expect(b.clear().__)        .toEqual({})  )
+    it("set",
+        () => expect(b.set('a', 4).__)    .toEqual({a:4})  )
     it("prop to set",
-        () => expect(b.prop(0, 6).__)      .toEqual({a:4})  )
+        () => expect(b.prop(0, 6).__)     .toEqual({a:4})  )
     it("prop to get",
-        () => expect(b.prop(0))            .toEqual(6)  )
+        () => expect(b.prop(0))           .toEqual(6)  )
     it("rekey",
         () => expect(b.rekey('a', 'c').__).toEqual({c:4})  )
     it("set",
-        () => expect(b.oset({b:6},{d:5}).__)    .toEqual({c:4, b:6, d:5})  )
+        () => expect(b.oset({b:6},{d:5}).__).toEqual({c:4, b:6, d:5})  )
     it("delete",
         () => expect(b.delete('d').__)    .toEqual({c:4, b:6})  )
     it("keys",
         () => expect(b.keys())            .toEqual(['c','b'])  )
     it("__",
         () => expect(b.__)                .toEqual({c:4, b:6})  )
+    it("backup and delete",
+        () => expect(b.backup('c').delete('c').__).toEqual({b:6})  )
+    it("restore",
+        () => expect(b.restore('c'))                .toEqual({c:4, b:6})  )
     it("is",
         () => expect(b.is({c:4, b:6}))    .toEqual(true)  )
     it("is with true callback",
@@ -41,9 +47,9 @@ describe(  "Object$", () => {
     it("typeof with true callback",
         () => expect(b.typeof('object', () => 'good')).toEqual('good')  )
     it("evalProperties type 1",
-        () => expect(c.evalProperties({name: 'ok'}).__).toEqual({a:'ok'})  )
+        () => expect(c.evaluateProperties({name: 'ok'}).__).toEqual({a:'ok'})  )
     it("evalProperties type 2",
-        () => expect(d.evalProperties({name: 'hi'}).__).toEqual({a:{b:'hi'}})  )
+        () => expect(d.evaluateProperties({name: 'hi'}).__).toEqual({a:{b:'hi'}})  )
     it("aset",
         () => expect(b.aset(['d'], [3]).__)     .toEqual({c:4, b:6, d:3})  )
 })
