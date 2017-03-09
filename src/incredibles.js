@@ -51,9 +51,9 @@ const __else_if = (o, f) => {
 //     v.length === 1 ?                    __func(v[0], o) :
 //     v.length === 2 ? condition.get(o) ? __func(v[0], o) : __func(v[1], o)
 //                    : console.log('error: return')
-const __pipe = (o, f) => {
+const __carry = (self, f) => {
     let ret
-    result.set(o, ret = f(o))
+    result.set(self, ret = f(self, property.get(self)))
     return ret  }
 
 const __prop = (o, ...args) => { // property { writable: true watch: f(k, oval, nval) value: }
@@ -73,28 +73,37 @@ const __prop = (o, ...args) => { // property { writable: true watch: f(k, oval, 
         else consosle.log('write protected') }
     return o  }
 
-const __propWatch = (o, p, w) => {
-    property.get(o)[p].watch = w
-    return o  }
+const __propWatch = (self, p, w) => {
+    property.get(self)[p].watch = w
+    return self  }
 
-const __propWritable = (o, p, w) => {
-    property.get(o)[p].writable = w
-    return o  }
+const __propWritable = (self, p, w) => {
+    property.get(self)[p].writable = w
+    return self  }
 
 
-const __assign = (obj, ...prop) => {
+const __assign = (self, ...prop) => {
     prop.forEach( p => {
-    p = p instanceof Object$ ? p.__ : p
-    for ( let k in p )
-        obj.set(k, p[k]) })
+        p = p instanceof Object$ ? p.__ : p
+        for ( let k in p )
+            self.set(k, p[k]) })
     // {
-        // if ( __.isObject(p[k]) ) obj.set( k, p[k] )
-        // else obj.set( k, p[k] ) } }  )
-    return obj  }
+        // if ( __.isObject(p[k]) ) self.set( k, p[k] )
+        // else self.set( k, p[k] ) } }  )
+    return self  }
 
-const __evaluateProperties = (o, self) => {
+const __add__ = (a, b) =>
+    Object.keys(b).forEach( k =>
+        'object' === typeof a[k] && 'object' === typeof b[k] ?
+            __add__(a[k], b[k]) : (a[k] = b[k]) )
+
+const __add = (self, ...o) => {
+    o.reduce( (a,v) => __add__(a, v), self.__)
+    return self  }
+
+const __invokeProperties = (o, self) => {
     Object.keys(o).forEach( k =>
-        o[k] = __.isObject(o[k])   ? __evaluateProperties(o[k], self) :
+        o[k] = __.isObject(o[k])   ? __invokeProperties(o[k], self) :
                __.isFunction(o[k]) ? o[k](self) : o[k] )
     return o  }
 
@@ -138,12 +147,12 @@ const __recursive = (o, f) => {
 
 // Function.prototype.typeof = (type, ...fn) => __typeof('function', type, this, ...fn)
 // Function.prototype.is = (f, ...fn) => __is(f.toString === this.toString, this, fn)
-// String.prototype.in$ = function() { return new String$(this) }
+// String.prototype.into$ = function() { return new String$(this) }
 
 
 let object   = new WeakMap()
 let property = new WeakMap()
-
+let descriptor = new WeakMap()
 class Map$ extends Map {
     constructor (arg) {
         super(arg)  }
@@ -163,8 +172,10 @@ let bind     = new Map$()
 class Object$ extends Object {
     constructor (arg) {
         super()
+        arg = arg instanceof Object$ ? arg.__: arg || {}
+        // Object.assign(this, arg)
         property.set(this, {}) // Yes. arg can be an array.
-        object.set(this, arg instanceof Object$ ? arg.__: arg || {})  }
+        object.set(this, arg)  }
     is (obj, ...fn) {
         return __is( __equal(this.__, obj), this.__, ...fn)  }
     typeof (type, ...fn) {
@@ -173,37 +184,38 @@ class Object$ extends Object {
     then (f)    { return __then(this, f)    }
     else (f)    { return __else(this, f)    }
     else_if (f) { return __else_if(this, f) }
-    pipe (f)    { return __pipe(this, f)    }
+    carry (f)   { return __carry(this, f)   }
     log (...f)  { return __log(this, ...f)  }
     prop (...p) { return __prop(this, ...p) }
     propWatch    (p, f) { return __propWatch(this, p, f)    }
     propWritable (p, f) { return __propWritable(this, p, f) }
     backup (...p)  {
         p.forEach(  v =>
-            __prop(this, '@prop:' + v, this.dget(v) )  )
+            __prop(this, '@prop:' + v, this.at(v) )  )
         return this  }
     restore (...p) {
         p.forEach(  v =>
-            this.dset( v, __prop(this, '@prop:' + v) )  )
+            this.setAt( v, __prop(this, '@prop:' + v) )  )
         return this  }
     remove (...p)  {
         p.forEach(  v =>
             this.backup(v).delete(v)  )
         return this  }
-    restoreAll () { return this.restore( ...this.keys() ) }
+    // restoreAll () { return this.restore( ...this.keys() ) }
     removeAll ()  { return this.remove ( ...this.keys() ) }
     delete (...keys) {
         if ( keys.length > 1 ) keys.map( v => delete this.__[v] )
         else delete this.__[ keys[0] ]
         return this  }
-    // __add (key, value) {
-    //     return this.set(key, value)  }
+
+    add (...o) {
+        return __add(this, ...o)  }
 
     set (key, value) {
         //this[key] = value Object.assign
         object.get(this)[key] = value
         return this  }
-    dset (key, value) {
+    setAt (key, value) {
         if (key.indexOf('.') === -1) return this.set(key, value)
         let k = key.split('.')
 
@@ -212,29 +224,33 @@ class Object$ extends Object {
             (Number(k[1]).toString() === k[1] ? [] : {}) ).get(k[0])
         o0 = new Object$(o0)
         k.length === 2 ?
-            __set (o0, k[1], value) : o0.dset(k.slice(1).join('.'), value)
+            __set (o0, k[1], value) : o0.setAt(k.slice(1).join('.'), value)
         return this  }
-    oset (...obj) {  // assign
+    dset (...v) { return this.setAt(...v) }
+    // oset (...obj) { return this.assign (...obj) }
+    assign (...obj) {  // assign
         __assign(this, obj[0])  // recursive obj reference assign
-        return obj.length > 1 ? this.oset( ...obj.slice(1) ) : this }
-    aset (key, value) { //   aset(['a', 'b', 'c'], [1,2,3])
+        return obj.length > 1 ? this.assign( ...obj.slice(1) ) : this }
+    zip (key, value) { //   aset(['a', 'b', 'c'], [1,2,3])
         key.forEach( (v, i) => this.set( v, value[i] ) )
         return this  }
-    setWhenUndefined (key, value) {
-        this.dget(key) === 'undefined' && this.dset(key, value)
-        return this}
+    // setEntries ([[key, value]]) {}
+    setIf (key, value, f) {
+        (__.isFunction(f) ? f(this.at(key)) : this.at(key) === f) &&
+            this.setAt(key, value)
+        return this  }
 
-    get$ (...key) {    // for object
-        return any$( this.get(...key) )  }
+    __get$ (...key) {    // for object
+        return from( this.get(...key) )  }
     get (...key) {
         // key.length > 3 & console.log(0, object.get(this))
         let k = object.get(this)[ key[0] ]
         return key.length > 1 ? __get(k, ...key.slice(1)) : k  }
-    dget$ (...key) {
-        return any$( this.dget(...key) )  }
-    dget (...key) {
+    __dget$ (...key) {
+        return from( this.at(...key) )  }
+    at (...key) {
         return this.get( ...key.join('.').split('.') )  }
-
+    dget (...key) { return this.at(...key) }
     size () { return this.keys().length }
     clear () {
         object.set(this, {})
@@ -244,8 +260,13 @@ class Object$ extends Object {
     forEach (f) {
         this.keys().forEach( k => f( this.get(k), k, this ) )
         return this  }
-    map (f)    { return this.keys().map(    k => f( this.get(k), k, this ) ) }
-    filter (f) { return this.keys().filter( k => f( this.get(k), k, this ) ) }
+    map (f)    { return this.keys().map( k => f( this.get(k), k, this ) ) }
+    filter (f) {
+        let ret = new Object$()
+        for (let p in this.__)
+            if ( f(this.get(p), p, this) )
+                ret.set(p, this.get(p))
+        return ret  }
     reduce (f, init) {
         let accumulator = init
         for (let p in this.__)
@@ -258,17 +279,17 @@ class Object$ extends Object {
     // entries () {
     //     return this.keys().map( k => [k, this.get(k)] )  }
 
-    assign (...o)  { return Object.assign(this.__, ...o) }
+    // assign (...o)  { return Object.assign(this.__, ...o) }
     entries ()  { return Object.entries(this.__) }
     freeze ()   { return Object.freeze(this.__) && this }
     isFrozen () { return Object.isFrozen(this.__) }
     seal ()     { return Object.seal(this.__) && this }
     isExtensible()     { return Object.isExtensible(this.__) }
     getPrototypeOf()   { return Object.getPrototypeOf(this.__) }
-    getOwnPropertyNames()   { return Object.getOwnPropertyNames(this.__) }
-    getOwnPropertySymbols() { return Object.getOwnPropertySymbols(this.__) }
+    getOwnPropertyNames()    { return Object.getOwnPropertyNames(this.__) }
+    getOwnPropertySymbols()  { return Object.getOwnPropertySymbols(this.__) }
     getOwnPropertyDescriptor (prop) { return Object.getOwnPropertyDescriptor(this.__, prop) }
-    valueOf ()   { return this.__.valueOf() }
+    valueOf ()   { return this.__ }
     toString ()  { return this.__.toString() }
     unwatch (p)  { return this.__.unwatch(p) }
     watch (p, handler) { return this.__.watch(p, handler) }
@@ -286,12 +307,44 @@ class Object$ extends Object {
         o = o || {}
         return new Object( Object.assign(o, this.__, Object.assign({}, o)) )  }
     stringify$ (...args) { return new String$( JSON.stringify(this.__, ...args) ) }
-    evaluateProperties (self) { // evaluateProperties evaluateProperties
+    invokeProperties (self) { // invokeProperties invokeProperties
         this.forEach(  (v,k) => this.set(  k,
             __.isFunction(v) ? v(self) :
-            __.isObject(v)   ? __evaluateProperties(v, self) : v  ))
+            __.isObject(v)   ? __invokeProperties(v, self) : v  ))
         return this  }
-    valueOf ()       { return this.__  }
+    // valueOf ()       { return this.__  }
+    invoke (f)  {
+        console.log(20, this.__, f)
+        return f(this.__) }
+    invoke$ (f) {
+        result.set(this, from( this.invoke(f) ))
+        return this  }
+    pop (p) {
+        if (0 === this.size()) return undefined // not found undefined
+        if (undefined !== p) {
+            let v = this.get(p)
+            this.delete(p)
+            return new Object({[p]: v}) }
+        else {
+            p = this.lastKey
+            let v = this.get(p)
+            this.delete(p)
+            return new Object$({[p]: v}) }  }
+    pop$ () {
+        result.set(this, this.pop())
+        return this  }
+    shift () {
+        if (0 === this.size()) return undefined
+        let p = this.lastKey
+        let v = this.get(p)
+        this.delete(p)
+        return new Object$({[p]: v})  }
+    shift$ () {
+        result.set(this, this.shift())
+        return this  }
+    get dot ()       { return property.get(this) }
+    get firstKey ()  { return this.keys()[0] }
+    get lastKey ()   { return this.keys()[ this.size() - 1 ] }
     get result ()    { return result.get(this)  }
     get condition () { return condition.get(this)  }
     get __ ()        { return object.get(this)  }  }
@@ -312,16 +365,27 @@ const xmlObject = o => {
 class XmlValue extends Object$ {
     constructor (arg) {
         super(arg)
-        object.set(this, arg instanceof Object$ ? arg.__: arg || {})
+        object.set(this, arg instanceof Object$ ? arg.__: arg || {}) // why?
             }
     value (...p) {
         // console.log(10, this.__)
         // console.log(...p.join('.').split('.').reduce( (a,v) => a.concat(v, 0), [] ) )
-        return this.dget( ...p.join('.').split('.').reduce( (a,v) => a.concat(v, 0), [] ))  }
+        return this.at( ...p.join('.').split('.').reduce( (a,v) => a.concat(v, 0), [] ))  }
     toSet (...p) {
         return [ this.value(...p) ]  }
 }
 
+
+class HtmlElement extends Object$ {
+    constructor (arg) {
+        super(arg)  }
+    appendChild (...v) {
+        this.__.appendChild(...v)
+        return this  }
+    addEventListener (...v) {
+        this.__.addEventListener(...v)
+        return this}
+}
 
 class Xml extends Object$ {
     constructor (arg) {
@@ -353,7 +417,7 @@ class Xml extends Object$ {
         this.prop('@root', new Object$(root))
         return this  }
     insert (obj) {
-        this.prop('@root').oset( xmlObject(obj) )
+        this.prop('@root').assign( xmlObject(obj) )
         return this  }
     removeElement (p) {
         this.prop('@root').remove(p)
@@ -374,7 +438,7 @@ class Xml extends Object$ {
         element([this.prop('@root').__], p)
         return this  }
     insertEvery (p, obj) {
-        return this.findEvery( p, v => v.oset(xmlObject( obj )) ) }
+        return this.findEvery( p, v => v.assign(xmlObject( obj )) ) }
     removeEvery (p) {
         return this.findEvery( p, (v, w) => w.delete(p) )  }
 }
@@ -386,7 +450,7 @@ class Array$ extends Array {
         super()
         property.set(this, {}) // write error if arg is object.
         let value = arg instanceof Array$ ? arg.__ : arg || []
-        this.prop('value', value)
+        this.prop('@value', value)
         if (value)
             for(let i = 0; i < value.length; i++)
                 this[i] = value[i]  }
@@ -398,25 +462,43 @@ class Array$ extends Array {
     then (f)    { return __then(this, f)    }
     else (f)    { return __else(this, f)    }
     else_if (f) { return __else_if(this, f) }
-    pipe (f)    { return __pipe(this, f)    }
+    carry (f)   { return __carry(this, f)    }
     prop (...p) { return __prop(this, ...p) }    // ... is to tell between prop('p', undefined) or prop('p')
-    propFn (p, f) { return __prop(this, p, f(this)) }
-    propWatch    (p, f)  { return __propWatch(this, p, f)    }
-    propWritable (p, b)  { return __propWritable(this, p, b) }
-    propDefaultOrGet (p, _default) {
-        return undefined === _default ? this.prop(p) : _default  }
-
+    propInvoke (p, f)   { return __prop(this, p, f(this)) }
+    propWatch  (p, f)   { return __propWatch(this, p, f)    }
+    propWritable (p, b) { return __propWritable(this, p, b) }
+    propPush () {}
+    propPop () {}
+    propShift () {}
+    propUnshift () {}
+    propSetIf (p, v, f) {
+        (__.isFunction(f) ? f(this.prop(p)) : this.prop(p) === f) &&
+            this.prop(p, v)
+        return this  }
+    propOrValue (p, v, f) {
+        f = f || (v => undefined !== v)
+        let prop = this.prop(p)
+        return f(prop) ? prop : v  }
+    valueOrProp (v, p, f) {
+        f = f || (v => undefined !== v)
+        return f(v) ? v : this.prop(p)  }
     log (...f)  { return __log(this, ...f)  }
 
     get (i) {
         return this[i]  }
     set (i, v) {
         return this[i] = v  }
-    update () {
-        let origin_arg = this.prop('value')
-        origin_arg.length = 0
+    reload () {
+        let origin = this.prop('@value')
+        this.length = 0
+        for(let i = 0; i < origin.length; i++)
+             this[i] = origin[i]
+        return this  }
+    sync () {
+        let origin = this.prop('@value')
+        origin.length = 0
         for(let i = 0; i < this.length; i++)
-            origin_arg[i] = this[i]
+            origin[i] = this[i]
         return this  }
     __indexOf (f) { // findIndex
         let fn
@@ -427,13 +509,14 @@ class Array$ extends Array {
         return -1  }
 
     find$ (f) {
-        return any$( this.find(f) )  }
+        return from( this.find(f) )  }
     push$ (...arg) {
         this.push(...arg)
         return this  }
     pop$ () {
         this.pop()
         return this  }
+    append (a) { return this.push$(...a) }
     shift$ (...v) {
         'undefined' !== typeof v && this.push(...v)
         this.shift()
@@ -442,8 +525,8 @@ class Array$ extends Array {
         this.unshift(...v)
         return this  }
     reduce$ (f, initialValue) {
-        initialValue = this.propDefaultOrGet('initialValue', initialValue)
-        return any$( this.reduce(f, initialValue) )  }
+        initialValue = this.valueOrProp(initialValue, '@initialValue')
+        return from( this.reduce(f, initialValue) )  }
     // map    (...args) { return Array$(object.get(this).map    (...args)) }
     // forEach(...args) { return Array$(object.get(this).forEach(...args)) }
     // filter (...args) { return Array$(object.get(this).filter (...args)) }
@@ -470,11 +553,11 @@ class Array$ extends Array {
         return this.difference(b, f)
             .concat(this.intersection(b, f))
             .concat(b.difference(this, f))  }
-    xmap (b, f) { f(v, w, i, a) }
-    __coMap (b, f) {
-        return this.reduce((a, v, i) => {
-        a[i] = f(v, b[i], i, this)
-        return a }, new Array$()  )  }
+    // xmap (b, f) { f(v, w, i, a) }
+    // __coMap (b, f) {
+    //     return this.reduce((a, v, i) => {
+    //     a[i] = f(v, b[i], i, this)
+    //     return a }, new Array$()  )  }
     insert (i, ...v) {              // if v is array?
         this.splice(i, 0, ...v)
         return this }
@@ -491,6 +574,112 @@ class Array$ extends Array {
     get condition () { return condition.get(this)  }
     get __ ()        { return Array.from(this)  }  }
 
+const __htmlTag = (o, tag, attr, ...a) =>
+    o.push$( HTML[tag](  attr, ...a.map(  v =>
+        __.isFunction(v) ? v( new Template(o) ) : v  )) )
+
+class BlazView extends Object$ {
+    constructor (arg) {
+        property.set(this, {view: arg, name: name}) }
+    lookup () {}
+    lookupInView () {}
+    lookupInAttr () {}
+    include () {}
+    includeBlock () {}
+    includeAttr () {}
+    includeAttrBlock () {}
+}
+
+let range = (start, end, step) => {}
+
+class Template extends Array$ {
+    constructor (arg, name) {
+        super()
+        if (arg instanceof Template) {
+            name = arg.name
+            arg = arg.view }
+        property.set(this, {view: arg, name: name}) }
+    include (name, ...a) { return this.push$(
+        __.isUndefined(a)
+                     ? cube.include(     this.view, name) :
+        a.length === 1 && __.isBlazeElement(a[0])
+                     ? cube.includeBlock(this.view, name, () => a) :
+        a.length > 1 ? cube.includeAttrBlock(this.view, name, a[0], () => a.slice(1))
+                     : cube.includeAttr( this.view, name, a[0])  )}
+    id    (v, ...a) { return __htmlTag(this, 'DIV', {id: v},    ...a) }
+    class (v, ...a) { return __htmlTag(this, 'DIV', {class: v}, ...a) }
+    toHTML () { return HTML.toHTML(this.__) }
+    get name () { return property.get(this).name }
+    get view () { return property.get(this).view }
+}
+
+// I will clean up when I have time.
+
+const htmlTags = 'a abbr acronym address applet area article aside audio b base basefont bdi bdo big blockquote body br button canvas caption center cite code col colgroup command data datagrid datalist dd del details dfn dir div dl dt em embed eventsource fieldset figcaption figure font footer form frame frameset h1 h2 h3 h4 h5 h6 head header hgroup hr html i iframe img input ins isindex kbd keygen label legend li link main map mark menu meta meter nav noframes noscript object ol optgroup option output p param pre progress q rp rt ruby s samp script section select small source span strike strong style sub summary sup table tbody td textarea tfoot th thead time title tr track tt u ul var video wbr'.toUpperCase().split(' ')
+let attributeClass = (key, value) => __.isString(value) ? value.replace(/\*/g, __.key2class(key)) : __.key2class(key)
+  // *-ok *-good
+const htmlEntities = { '123': '{', '125': '}' }
+
+let displayValue = (v) =>
+  __.isEnclosedBy(v, '&#', ';') ? v.replace(/&#([0-9]{3});/g, (m, $1) => $1 in htmlEntities ? htmlEntities[$1] : m) : v
+
+let mustacheAttr = (v, f, _) =>
+  __.isEmpty(v) ? '' :
+  __.isArray(v) ? () => v :
+  __.isFunction(v) ? v( new Template(_) ) :
+  __.isEnclosedBy(v, '{', '}') ? v.split(/[{}]/).map( (v, i) => i % 2 === 1 ? f(v) : displayValue(v) ).filter( (v) => v ) :
+    displayValue(v)
+
+let blazeAttr = (_, obj) => {
+  let f  = cube.lookupInAttr.bind(null, _)
+  let fo = __.fixup.call({ part: __._AttrParts }, obj)
+  let o  = __.reduceKeys(fo, {}, (o, k) =>
+      __.check('class', k) && fo[k].indexOf('*') > -1 ?
+        __.object(o, 'class', mustacheAttr(attributeClass(k, fo[k]), f, _)) :
+      'local' === k ?
+        __.object(o, 'id', __.isBlazeView(_) ? __.key2id.call(__.module(_), fo[k]) : mustacheAttr(fo[k], f, _)) :
+        __.object(o, k, mustacheAttr(fo[k], f, _)))
+  return __.keys(o).length === 1 && o[__.theKey(o)] === '' ? __.theKey(o) : o }
+
+htmlTags.forEach(tag => Template.prototype[tag] = function(...arr) {
+    return this.push$( 0 === arr.length ? HTML[tag]() : HTML[tag](...arr.into$
+        .if( v=>__.isBlazeAttr(v[0]) )
+        .then( v=>v.prop('@initialValue', [ blazeAttr(this.view, v.shift()) ].into$) )
+        .propSetIf('@initialValue', [].into$)
+        .reduce$( (a,v) => a.append(
+            mustacheAttr(v, cube.lookupInView.bind(null, this.view), this.view) ) ).__  ))  })
+
+
+                // arr.slice(1).reduct( (a,v)=> a = a.concat(
+                //     mustacheAttr(v, cube.lookupInView.bind(null, this.view), this.view)
+                // ), __.isBlazeAttr(obj[0]) ? [])
+
+// let mustache = (_, a) => {
+//   let f = cube.lookupInView.bind(null, _)
+//   return __.reduce(a, [], (o, v) => __.array(o, mustacheAttr(v, f, _)))  }
+
+  // return __.isArray(a) ? __.reduce(a, [], (o, v) => __.array(o, mustacheAttr(v, f)))
+  //                      : mustacheAttr(a, f)  }
+
+
+// htmlTags.forEach(tag => Template.prototype[tag] = function(...obj) { return this.push$(
+//     __.isBlazeAttr(obj[0]) ? //
+//       obj.length === 1 ? HTML[tag](blazeAttr(this.view, obj[0]))
+//                        : HTML[tag](blazeAttr(this.view, obj[0]), mustache(this.view, obj.slice(1))) :
+//       obj.length === 0 ? HTML[tag]()
+//                        : HTML[tag](mustache(this.view, obj ))  )})
+
+// let blazeElement = (view, ...arg) => {
+//     let it = []
+//     __.isBlazeAttr(arg[0]) && it.push(blazeAttr(view, arg.shift() ))
+//     it.push(...arg.reduce( (a,v) => a.push$(
+//         ...mustacheAttr(v, cube.lookupInView.bind(null, view), view)  ), [].into$).__)
+//     return it  }
+
+// htmlTags.forEach(tag =>
+//     Template.prototype[tag] = function(...obj) {
+//         return this.push$(
+//             0 === obj.length ? HTML[tag]() : HTML[tag](...blazeElement(this.view, ...obj))  )})
 
 // let Array$ = v => v instanceof Array$ ? v : new Array$(v)//.concat(v)
 class Function$ extends Function {
@@ -504,7 +693,7 @@ class Function$ extends Function {
     then (f)    { return __then(this, f)    }
     else (f)    { return __else(this, f)    }
     else_if (f) { return __else_if(this, f) }
-    pipe (f)    { return __pipe(this, f)    }
+    carry (f)    { return __carry(this, f)    }
     prop (...p) { return __prop(this, ...p) }
     log (...f)  { return __log(this, ...f)  }
 
@@ -525,7 +714,7 @@ class String$ extends String {
     then (f)    { return __then(this, f)    }
     else (f)    { return __else(this, f)    }
     else_if (f) { return __else_if(this, f) }
-    pipe (f)    { return __pipe(this, f)    }
+    carry (f)    { return __carry(this, f)    }
     prop (...p) { return __prop(this, ...p) }
 
     path (...str) { // path$
@@ -537,8 +726,11 @@ class String$ extends String {
     dasherize () {
         return this.replace( /([A-Z])/g,  $1 => '-' + $1.toLowerCase() ) }
     parseJson$ () {
-        return new Object$( JSON.parse(this.__) )
-    }
+        return new Object$( JSON.parse(this.__) )  }
+    invoke (f) {
+        return f(this.__, this)  }
+    invoke$ (f) {
+        return from( this.invoke(f) )  }
     log (...f)       { return __log(this, ...f) }
     get result ()    { return result.get(this)  }
     get condition () { return condition.get(this)  }
@@ -560,7 +752,7 @@ class Number$ extends Number {
     then (f)    { return __then(this, f)    }
     else (f)    { return __else(this, f)    }
     else_if (f) { return __else_if(this, f) }
-    pipe (f)    { return __pipe(this, f)    }
+    carry (f)    { return __carry(this, f)    }
     prop (...p) { return __prop(this, ...p) }
     log (...f)  { return __log(this, ...f)  }
 
@@ -584,7 +776,7 @@ class Boolean$ extends Boolean {
     then (f)    { return __then(this, f)    }
     else (f)    { return __else(this, f)    }
     else_if (f) { return __else_if(this, f) }
-    pipe (f)    { return __pipe(this, f)    }
+    carry (f)    { return __carry(this, f)    }
     prop (...p) { return __prop(this, ...p) }
     log (...f)  { return __log(this, ...f)  }
 
@@ -605,7 +797,7 @@ class Date$ extends Date {
     then (f)    { return __then(this, f)    }
     else (f)    { return __else(this, f)    }
     else_if (f) { return __else_if(this, f) }
-    pipe (f)    { return __pipe(this, f)    }
+    carry (f)    { return __carry(this, f)    }
     prop (...p) { return __prop(this, ...p) }
     log (...f)  { return __log(this, ...f)  }
 
@@ -617,7 +809,7 @@ class Buffer$ extends Buffer {
         property.set(this, {})  }
 }
 
-class Variable {
+class Value {
     constructor (arg) {
         this.value = arg
         property.set(this, {})  }
@@ -629,7 +821,7 @@ class Variable {
     then (f)    { return __then(this, f)    }
     else (f)    { return __else(this, f)    }
     else_if (f) { return __else_if(this, f) }
-    pipe (f)    { return __pipe(this, f)    }
+    carry (f)    { return __carry(this, f)    }
     prop (...p) { return __prop(this, ...p) }
     log (...f)  { return __log(this, ...f)  }
 
@@ -638,7 +830,7 @@ class Variable {
     get __ ()        { return this.value }  }
 
 
-let any$ = v => {
+let from = v => {
     if ( v instanceof Date )     return new Date$    (v)
     else if ( __.isFunction(v) ) return new Function$(v)
     else if ( __.isObject  (v) ) return new Object$  (v)
@@ -647,11 +839,18 @@ let any$ = v => {
     else if ( __.isNumber  (v) ) return new Number$  (v) // NaN is not here
     else if ( __.isBoolean (v) ) return new Boolean$ (v)
     else if ( undefined === v || null === v || Object.is(NaN, v) )
-        return new Variable(v) // null, undefined, NaN,
+        return new Value(v) // null, undefined, NaN,
     else return v  }
 
-let prop = '$'
+// let range = (start, end, step) =>
+
+
+let prop = 'into$'
 if (prop) {
+    Object.defineProperty(  Object.prototype,   prop, {
+        enumerable:   false
+      , configurable: true
+      , get: function () { return new Object$  (this) }  })
     Object.defineProperty(  Function.prototype, prop, {
         enumerable:   false
       , configurable: true
@@ -683,8 +882,7 @@ if (prop) {
 
 
 let exported = {
-    $:         any$
-  , from:      any$
+    from:      from
   , Map$:      Map$
   , Object$:   Object$
   , Array$:    Array$
@@ -693,33 +891,40 @@ let exported = {
   , String$:   String$
   , Number$:   Number$
   , Boolean$:  Boolean$
-  , Variable:  Variable
+  , Value:     Value
   , Xml:       Xml
   , map:       v => new Map$(v)
   , function:  v => new Function$(v)
   , date:      v => new Date$(v)
   , object:    v => new Object$(v)
-  , array:     v => new Array$(v)
+  , array:     v => new Array$(v) // range(1,20) (2,20,3)
   , string:    v => new String$(v)
   , number:    v => new Number$(v)
   , boolean:   v => new Boolean$(v)
   , xml:       v => new Xml(v)
   , xmlValue:  v => new XmlValue(v)
+  , module:    v => __.Module(v)
+  , template:   (v, name) => new Template(v, name)
+  , htmlElement: v        => new HtmlElement(v)
+  // , range:     range
+  // , IncredifyProperty: augument
+  // , fileFrom('hello')
+  // return function and property. Is there ES6 way?
 }
+
 
 let meteor = {}
 meteor.queryString = o => new Object$(o)
-    .pipe(  v => v.get$('query')
+    .carry(  v => v.get('query').into$
         .map( (w,k) => encodeURIComponent(k) + "=" + encodeURIComponent(w) )
         .join( v.__.delimeter || '&' )  )
 meteor.getUrlfromSettings = p => {
-    console.log(0, new Object$(__._Settings))
-    return new Object$(__._Settings).dget$(p)
-    .pipe( v => v.__.url + '?' + meteor.queryString(v.__.options) ) }
+    // console.log(0, new Object$(__._Settings))
+    return new Object$(__._Settings).at(p).into$
+    .carry( v => v.__.url + '?' + meteor.queryString(v.__.options) ) }
 
 
 // if ('undefined' !== typeof Meteor)
 exported.meteor = meteor
-
 
 module.exports  = exported
