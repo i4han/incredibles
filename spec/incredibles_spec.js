@@ -7,51 +7,53 @@ describe(  "Object$", () => {
     let c = in$.from({a: o => o.name})
     let d = in$.from({a:{b: v => v.name}})
     it("in$.from",
-        () => expect(in$.from({a: 1}).__)     .toEqual({a:1})  )
+        () => expect(in$.from({a: 1}).value)  .toEqual({a:1})  )
     it("set",
-        () => expect(b.set('a', 4).__)     .toEqual({a:4})  )
+        () => expect(b.set('a', 4).value)     .toEqual({a:4})  )
     it("is",
         () => expect(b.is({a: 4}))         .toEqual(true)  )
     it("dset",
-        () => expect(b.dset('b.c', 3).__)  .toEqual({a:4,b:{c:3}})  )
+        () => expect(b.setAt('b.c', 3).value)  .toEqual({a:4,b:{c:3}})  )
     it("delete",
-        () => expect(b.delete('b').__)     .toEqual({a:4})  )
+        () => expect(b.delete('b').value)     .toEqual({a:4})  )
+    it("setAt",
+        () => expect(b.setAt(0, 'a.b', 4, 'c', 'd.e.2', 'hello').at(0, 'a.b.4.c', 'd.e.2')).toEqual('hello'))
     it("clear",
-        () => expect(b.clear().__)         .toEqual({})  )
+        () => expect(b.clear().value)         .toEqual({})  )
     it("set",
-        () => expect(b.set('a', 4).__)     .toEqual({a:4})  )
+        () => expect(b.set('a', 4).value)     .toEqual({a:4})  )
     it("prop to set",
-        () => expect(b.prop(0, 6).__)      .toEqual({a:4})  )
+        () => expect(b.prop(0, 6).value)      .toEqual({a:4})  )
     it("prop to get",
         () => expect(b.prop(0))            .toEqual(6)  )
     it("rekey",
-        () => expect(b.rekey('a', 'c').__) .toEqual({c:4})  )
+        () => expect(b.rekey('a', 'c').value) .toEqual({c:4})  )
     it("set",
-        () => expect(b.assign({b:6},{d:5}).__).toEqual({c:4, b:6, d:5})  )
+        () => expect(b.assign({b:6},{d:5}).value).toEqual({c:4, b:6, d:5})  )
     it("delete",
-        () => expect(b.delete('d').__)     .toEqual({c:4, b:6})  )
+        () => expect(b.delete('d').value)     .toEqual({c:4, b:6})  )
     it("keys",
         () => expect(b.keys())             .toEqual(['c','b'])  )
     it("__",
-        () => expect(b.__)                 .toEqual({c:4, b:6})  )
-    it("backup and delete",
-        () => expect(b.backup('c').delete('c').__).toEqual({b:6})  )
+        () => expect(b.value)              .toEqual({c:4, b:6})  )
+    it("save and delete",
+        () => expect(b.cash.saveValuePropertyTo('c').delete('c').value).toEqual({b:6})  )
     it("restore",
-        () => expect(b.restore('c').__)    .toEqual({c:4, b:6})  )
+        () => expect(b.cash.restoreValuePropertyFrom('c').value)       .toEqual({c:4, b:6})  )
     it("is",
         () => expect(b.is({c:4, b:6}))     .toEqual(true)  )
     it("is with true callback",
         () => expect(b.is({c:4, b:6}, () => 'ok')).toEqual('ok')  )
     it("typeof",
-        () => expect(b.typeof('object'))   .toEqual(true)  )
+        () => expect(b.typeof('object'))          .toEqual(true)  )
     it("typeof with true callback",
         () => expect(b.typeof('object', () => 'good')).toEqual('good')  )
     it("evalProperties type 1",
-        () => expect(c.invokeProperties({name: 'ok'}).__).toEqual({a:'ok'})  )
+        () => expect(c.invokeProperties({name: 'ok'}).value).toEqual({a:'ok'})  )
     it("evalProperties type 2",
-        () => expect(d.invokeProperties({name: 'hi'}).__).toEqual({a:{b:'hi'}})  )
+        () => expect(d.invokeProperties({name: 'hi'}).value).toEqual({a:{b:'hi'}})  )
     it("aset",
-        () => expect(b.zip(['d'], [3]).__).toEqual({c:4, b:6, d:3})  )
+        () => expect(b.zip(['d'], [3]).value).toEqual({c:4, b:6, d:3})  )
 })
 
 describe(  "Array$", () => {
@@ -86,10 +88,10 @@ describe(  "Array$", () => {
 describe(  "Function", () => {
     let f = (a, b) => a + b
     let fi = in$.from(f)
-    it("2",
-        () => expect(f(1,2))             .toEqual(3)  )
-    it("3",
-        () => expect(fi.__.call([], 1,2)).toEqual(3)  )
+    it("function",
+        () => expect(f(1,2))        .toEqual(3)  )
+    it("invoke",
+        () => expect(fi.invoke(1,2).value).toEqual(3)  )
 
 })
 
