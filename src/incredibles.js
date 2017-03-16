@@ -305,7 +305,7 @@ const __init = (self, ...args) => {
         object.set(self, arg) }
     else {
         // arg = arg instanceof Object$ ? arg.value: arg || {}
-        this.type = undefined !== type ? type : 'object'
+        self.type = (undefined !== type) ? type : 'object'
         object.set(self, arg) }
     return self  }
 
@@ -385,8 +385,11 @@ class Object$ extends Object {
             this.setAt(key, value)
         return this  }
     setDefault (key, value) { return this.setIf(key, value) }
-    setValue (o, prop) {
-        o[prop] = this.value
+    setValue (...args) {
+        if (args.length === 1 && 'string' === typeof args[0])
+            global[args[0]]  = this.value
+        else if (args.length === 2)
+            args[0][args[1]] = this.value
         return this  }
     get (...key) {
         // key.length > 3 & console.log(0, object.get(this))
@@ -479,13 +482,17 @@ class Object$ extends Object {
     // valueOf ()       { return this.__  }
     argument (...args) {
         return args.map(v =>
-            v === undefined ? v :
+            !v ? v : // undefined, null, false, 0, '', NaN
             v.type === 'code' ? eval(v.value) :
             v.type === 'cash_property_name' ? this.$[v.value] : v
         )}
+    openChain (f, ...args) {
+        f(this.value, ...this.argument(...args))
+        return this  }
     chain (f, ...args)  { return this.reset( f(this.value, ...this.argument(...args)) ) }
     chainLinked (...f)  { return this.reset( f.reduce( (a,v)=> v(a) , this.value ) ) }
-    unchain (v) { // undefined, true or false
+    unchain (v) { return this.loose(v) }
+    loose (v) { //  change to loose
         if (v === undefined)
             this.unchained = true
         else this.unchained = v
@@ -539,6 +546,17 @@ class Object$ extends Object {
 
 
 
+class HtmlElement extends Object$ {
+    constructor (arg) {
+        super(arg)  }
+    appendChild (...v) {
+        this.value.appendChild(...v)
+        return this  }
+    addEventListener (...v) {
+        this.value.addEventListener(...v)
+        return this  }
+}
+
 const xmlObject = o => {
     let value = {}
     for (let p in o) {
@@ -550,32 +568,6 @@ const xmlObject = o => {
         else
             value[p] = [o[p].toString()] }
     return value  }
-
-
-class XmlValue extends Object$ {
-    constructor (arg) {
-        super(arg)
-        object.set(this, arg instanceof Object$ ? arg.__: arg || {}) // why?
-            }
-    value (...p) {
-        // console.log(10, this.__)
-        // console.log(...p.join('.').split('.').reduce( (a,v) => a.concat(v, 0), [] ) )
-        return this.at( ...p.join('.').split('.').reduce( (a,v) => a.concat(v, 0), [] ))  }
-    toSet (...p) {
-        return [ this.value(...p) ]  }
-}
-
-
-class HtmlElement extends Object$ {
-    constructor (arg) {
-        super(arg)  }
-    appendChild (...v) {
-        this.__.appendChild(...v)
-        return this  }
-    addEventListener (...v) {
-        this.__.addEventListener(...v)
-        return this}
-}
 
 class Xml extends Object$ {
     constructor (arg) {
@@ -630,8 +622,7 @@ class Xml extends Object$ {
     insertEvery (p, obj) {
         return this.findEvery( p, v => v.assign(xmlObject( obj )) ) }
     removeEvery (p) {
-        return this.findEvery( p, (v, w) => w.delete(p) )  }
-}
+        return this.findEvery( p, (v, w) => w.delete(p) )  }  }
 
 //{Style: {"$id": "pline", LineStyle:{color: "ff00ff", width: 4} } }
 
@@ -840,11 +831,9 @@ let blazeAttr = (_, obj) => {
 
 htmlTags.forEach(tag => Template.prototype[tag] = function(...arr) {
     return this.push$( 0 === arr.length ? HTML[tag]() : HTML[tag](...arr.into$
-        .if( v=>__.isBlazeAttr(v[0]) )
-        .then( v=>v.prop('@initialValue', [ blazeAttr(this.view, v.shift()) ].into$) )
-        .propSetIf('@initialValue', [].into$)
         .reduce$( (a,v) => a.append(
-            mustacheAttr(v, cube.lookupInView.bind(null, this.view), this.view) ) ).__  ))  })
+            mustacheAttr(v, cube.lookupInView.bind(null, this.view), this.view) ),
+            v=>__.isBlazeAttr(v[0]) ? [ blazeAttr(this.view, v.shift()) ].into$ : [].into$ ).value  ))  })
 
 
                 // arr.slice(1).reduct( (a,v)=> a = a.concat(
@@ -1053,6 +1042,11 @@ let from = v => {
         return new Value(v) // null, undefined, NaN,
     else return v  }
 
+let strip = v => {
+    if ( v instanceof Object$ ) v = v.value
+    if ( v instanceof String$ || v instanceof Function$ ) v = v.value
+    return v ? v.valueOf() : v  }
+
 let code = str => new Object$(str[0], 'code')
 // let range = (start, end, step) =>
 from({
@@ -1127,11 +1121,10 @@ let exported = {
   , string:    v => new String$(v)
   , number:    v => new Number$(v)
   , boolean:   v => new Boolean$(v)
-  , xml:       v => new Xml(v)
-  , xmlValue:  v => new XmlValue(v)
   , module:    v => __.Module(v)
   , template:   (v, name) => new Template(v, name)
   , htmlElement: v        => new HtmlElement(v)
+  , strip: strip
   , is: __equal
   // , range:     range
   // , IncredifyProperty: augument
