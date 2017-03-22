@@ -1,37 +1,37 @@
 
 let in$ = require('../src/incredibles.js')
 
-describe(  "Object$", () => {
+describe(  "In$", () => {
     let a = in$.from({a:1, b:3, c:3, d:4})
     let b = in$.from({})
     let c = in$.from({a: o => o.name})
     let d = in$.from({a:{b: v => v.name}})
     it("in$.from",
-        () => expect(in$.from({a: 1}).value)  .toEqual({a:1})  )
+        () => expect(in$.from({a: 1}).value) .toEqual({a:1})  )
     it("set",
-        () => expect(b.set('a', 4).value)     .toEqual({a:4})  )
+        () => expect(b.set('a', 4).value)    .toEqual({a:4})  )
     it("is",
         () => expect(b.is({a: 4}))         .toEqual(true)  )
     it("dset",
-        () => expect(b.setAt('b.c', 3).value)  .toEqual({a:4,b:{c:3}})  )
+        () => expect(b.setAt('b.c', 3).value).toEqual({a:4,b:{c:3}})  )
     it("delete",
-        () => expect(b.delete('b').value)     .toEqual({a:4})  )
+        () => expect(b.delete('b').value)    .toEqual({a:4})  )
     it("setAt",
         () => expect(b.setAt(0, 'a.b', 4, 'c', 'd.e.2', 'hello').at(0, 'a.b.4.c', 'd.e.2')).toEqual('hello'))
     it("clear",
-        () => expect(b.clear().value)         .toEqual({})  )
+        () => expect(b.clear().value)      .toEqual({})  )
     it("set",
-        () => expect(b.set('a', 4).value)     .toEqual({a:4})  )
+        () => expect(b.set('a', 4).value)  .toEqual({a:4})  )
     it("prop to set",
-        () => expect(b.prop(0, 6).value)      .toEqual({a:4})  )
+        () => expect(b.prop(0, 6).value)   .toEqual({a:4})  )
     it("prop to get",
         () => expect(b.prop(0))            .toEqual(6)  )
     it("rekey",
-        () => expect(b.rekey('a', 'c').value) .toEqual({c:4})  )
+        () => expect(b.rekey('a', 'c').value).toEqual({c:4})  )
     it("set",
         () => expect(b.assign({b:6},{d:5}).value).toEqual({c:4, b:6, d:5})  )
     it("delete",
-        () => expect(b.delete('d').value)     .toEqual({c:4, b:6})  )
+        () => expect(b.delete('d').value)  .toEqual({c:4, b:6})  )
     it("keys",
         () => expect(b.keys())             .toEqual(['c','b'])  )
     it("__",
@@ -68,20 +68,20 @@ describe(  "Array$", () => {
     it("typeof returns false",
         () => expect(a.if(v => v.typeof('object')).else(23).result).toEqual(23)  )
     it("length",
-        () => expect(in$.from([1,1,1,1,1]).length).toEqual(5)  )
+        () => expect(in$.from([1,1,1,1,1]).size()).toEqual(5)  )
     it("findIndex",
-        () => expect(a.findIndex(v => v === 2))  .toEqual(1)  )
+        () => expect(a.findIndex(v => v === 2).value)  .toEqual(1)  )
     it("find",
-        () => expect(a.find( v => v === 5 )).toEqual(in$.from(5)) )
+        () => expect(a.find( v => v === 5 ).value).toEqual(in$.from(5)) )
     it("union",
-        () => expect(a.union(b))       .toEqual([1,2,3,4,5,6,7,8])  )
+        () => expect(a.cut().union(b).value)      .toEqual([1,2,3,4,5,6,7,8])  )
     it("intersection",
-        () => expect(a.intersection(b)).toEqual([4,5])  )
+        () => expect(a.intersection(b).value).toEqual([4,5])  )
     it("difference",
-        () => expect(a.difference(b))  .toEqual([1,2,3])  )
-    it("is returns true",
+        () => expect(a.difference(b).value)  .toEqual([1,2,3])  )
+    it("'is' returns true",
         () => expect(a.is([1,2,3,4,5])).toEqual(true)  )
-    it("is returns false",
+    it("'is' returns false",
         () => expect(a.is([1,2,3,4]))  .toEqual(false)  )
 })
 
@@ -95,8 +95,11 @@ describe(  "Function", () => {
 
 })
 
+let path = require('path')
+
 describe(  "String$", () => {
-    let s1 = in$.from('hello')
+    in$.method('path', path.join)
+    let s1 = in$.from('hello').cut()
     let s2 = in$.from('world')
     it("1",
         () => expect(s1.typeof('function')) .toEqual(false)  )
@@ -105,19 +108,19 @@ describe(  "String$", () => {
     it("3",
         () => expect(s1.if(v => v.is('hello')).then(() => 3).result)  .toEqual(3)  )
     it("4",
-        () => expect(s1.path('home', 'client').__).toEqual('hello/home/client')  )
+        () => expect(s1.path('home', 'client').value).toEqual('hello/home/client')  )
     it("5",
-        () => expect(s1.path(s2, 'client').__)    .toEqual('hello/world/client')  )
+        () => expect(s1.path(s2.value, 'client').value).toEqual('hello/world/client')  )
     it("6",
-        () => expect(s1.__)                       .toEqual('hello')  )
+        () => expect(s1.value)                       .toEqual('hello')  )
     it("7",
-        () => expect(s1.if(v => v.is('hello')).then( w => w + 'o' ).result).toEqual('helloo')  )
+        () => expect(s1.if(v => in$.is(v.value, 'hello')).then( w => w.value + 'o' ).result).toEqual('helloo')  )
     it("8",
-        () => expect(s1.if(v => v.is('hell' )).else( x => x + 'p' ).result).toEqual('hellop')  )
+        () => expect(s1.if(v => in$.is(v.value, 'hell' )).else( x => x.value + 'p' ).result).toEqual('hellop')  )
     it("10",
-        () => expect(in$.from('hello-world').camelize()) .toEqual('helloWorld') )
+        () => expect(in$.from('hello-world').camelize().value) .toEqual('helloWorld') )
     it("11",
-        () => expect(in$.from('helloWorld') .dasherize()).toEqual('hello-world') )
+        () => expect(in$.from('helloWorld') .dasherize().value).toEqual('hello-world') )
 
 })
 
