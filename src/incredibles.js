@@ -915,12 +915,12 @@ class Array$ extends Array {
     //     return this.reduce((a, v, i) => {
     //     a[i] = f(v, b[i], i, this)
     //     return a }, new Array$()  )  }
-    insert (i, ...v) {              // if v is array?
-        this.splice(i, 0, ...v)
-        return this }
-    delete (i, n, ...v) {
-        this.splice(i, n, ...v)
-        return this }
+    // insert (i, ...v) {              // if v is array?
+    //     this.splice(i, 0, ...v)
+    //     return this }
+    // delete (i, n, ...v) {
+    //     this.splice(i, n, ...v)
+    //     return this }
     sum (f) {
         f = f || (v => v)
         return this.reduce(((a,v) => a += f(v)), 0)  }
