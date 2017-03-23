@@ -808,34 +808,34 @@ class Array$ extends Array {
             for(let i = 0; i < value.length; i++)
                 this[i] = value[i]  }
     //
-    is (a, ...fn) {
-        return __is(  is(this.value, a.valueOf() ), this, ...fn ) }
-    typeof (type, ...fn) {
-        return __typeof(this, type, ...fn) }
-    if   (f)    { return __if  (this, f)   }
-    then (f)    { return __then(this, f)   }
-    else (f)    { return __else(this, f)   }
-    else_if (f) { return __else_if(this, f) }
+    // is (a, ...fn) {
+    //     return __is(  is(this.value, a.valueOf() ), this, ...fn ) }
+    // typeof (type, ...fn) {
+    //     return __typeof(this, type, ...fn) }
+    // if   (f)    { return __if  (this, f)   }
+    // then (f)    { return __then(this, f)   }
+    // else (f)    { return __else(this, f)   }
+    // else_if (f) { return __else_if(this, f) }
+    // openCarry (f, ...v)   { return __run(this, f, ...v) }
+    // prop (...p) { return __prop(this, ...p) }    // ... is to tell between prop('p', undefined) or prop('p')
+    // propSetIf (p, v, f) {
+    //     (__.isFunction(f) ? f(this.prop(p)) : this.prop(p) === f) &&
+    //         this.prop(p, v)
+    //     return this  }
+    // propOrValue (p, v, f) {
+    //     f = f || (v => undefined !== v)
+    //     let prop = this.prop(p)
+    //     return f(prop) ? prop : v  }
+    // valueOrProp (v, p, f) {
+    //     f = f || (v => undefined !== v)
+    //     return f(v) ? v : this.prop(p)  }
+    // log (...f)  { return __log(this, ...f)  }
     carry (f, ...v)   { return __carry(this, f, ...v) }
-    openCarry (f, ...v)   { return __run(this, f, ...v) }
-    prop (...p) { return __prop(this, ...p) }    // ... is to tell between prop('p', undefined) or prop('p')
-    propSetIf (p, v, f) {
-        (__.isFunction(f) ? f(this.prop(p)) : this.prop(p) === f) &&
-            this.prop(p, v)
-        return this  }
-    propOrValue (p, v, f) {
-        f = f || (v => undefined !== v)
-        let prop = this.prop(p)
-        return f(prop) ? prop : v  }
-    valueOrProp (v, p, f) {
-        f = f || (v => undefined !== v)
-        return f(v) ? v : this.prop(p)  }
-    log (...f)  { return __log(this, ...f)  }
     out (v) {
         v = undefined === v ? ' ' : v
         console.log( this.join(v) )
         return this }
-    //
+
 
     get (i)    { return this[i]  }
     set (i, v) { return this[i] = v  }
