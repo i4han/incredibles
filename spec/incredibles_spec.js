@@ -60,29 +60,29 @@ describe(  "Array$", () => {
     let a = in$.from([1,2,3,4,5])
     let b = in$.from([4,5,6,7,8])
     it("is",
-        () => expect(a.is([1,2,3,4,5]))      .toEqual(true)  )
+        () => expect(a.if([1,2,3,4,5]).logic).toEqual(true) )
     it("typeof",
-        () => expect(a.typeof('array'))      .toEqual(true)  )
+        () => expect(a.if({type: 'array'}).logic).toEqual(true) )
     it("typeof returns true",
-        () => expect(a.if(v => v.typeof('array') ).then(v => 21).result).toEqual(21)  )
+        () => expect(a.if({type: 'array'}).then(v => 21).result).toEqual(21)  )
     it("typeof returns false",
-        () => expect(a.if(v => v.typeof('object')).else(23).result).toEqual(23)  )
+        () => expect(a.if({type: 'object'}).else(23).result).toEqual(23)  )
     it("length",
         () => expect(in$.from([1,1,1,1,1]).size()).toEqual(5)  )
     it("findIndex",
-        () => expect(a.findIndex(v => v === 2).value)  .toEqual(1)  )
+        () => expect(a.cut().findIndex(v => v === 2).value).toEqual(1) )
     it("find",
-        () => expect(a.find( v => v === 5 ).value).toEqual(in$.from(5)) )
+        () => expect(a.find(v => v === 5).value).toEqual(in$.from(5))  )
     it("union",
-        () => expect(a.cut().union(b).value)      .toEqual([1,2,3,4,5,6,7,8])  )
+        () => expect(a.union(b).value) .toEqual([1,2,3,4,5,6,7,8])  )
     it("intersection",
-        () => expect(a.intersection(b).value).toEqual([4,5])  )
+        () => expect(a.intersection(b).value).toEqual([4,5]) )
     it("difference",
-        () => expect(a.difference(b).value)  .toEqual([1,2,3])  )
+        () => expect(a.difference(b).value).toEqual([1,2,3]) )
     it("'is' returns true",
-        () => expect(a.is([1,2,3,4,5])).toEqual(true)  )
+        () => expect(a.if([1,2,3,4,5]).logic).toEqual(true)  )
     it("'is' returns false",
-        () => expect(a.is([1,2,3,4]))  .toEqual(false)  )
+        () => expect(a.if([1,2,3,4]).logic) .toEqual(false)  )
 })
 
 describe(  "Function", () => {

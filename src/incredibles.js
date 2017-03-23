@@ -14,9 +14,17 @@ if ('undefined' === typeof Meteor) {
     bypassRequire('underscore2')  }
     // path = bypassRequire('path')  }
 
-let condition = new WeakMap()
-let result    = new WeakMap()
+let logic  = new WeakMap()
+let result = new WeakMap()
 
+const is = (x, y) => {
+    if ( Object.is(x, y) ) return true
+    if ( 'object' !== typeof y || 'object' !== typeof x ||
+        x.constructor !== y.constructor ||
+        Object.keys(x).length !== Object.keys(y).length ) return false
+    for (let p in x)
+        if ( ! is(x[p], y[p]) ) return false
+    return true  }
 
 const __func  = (fn, o) => __.isFunction(fn) ? result.set(o, fn(o)) : result.set(o, fn)
 
@@ -32,25 +40,30 @@ const __typeof = (self, type, ...fn) =>
     fn.length === 2 ? self.type === type ? fn[0](self) : fn[1](self)
                     : console.log('error: typeof')
 
+const __checkProp = (self, o) => {
+    // console.log(0, Object.keys(o).map(k => self[k] === o[k]).every(v=>v))
+    return Object.keys(o).map(k => self[k] === o[k]).every(v=>v) }
+
 const __if = (self, f) => {
-    condition.set( self, __.isFunction(f) ? !!f(self) : !!f )
+    logic.set( self, __.isFunction(f) ? !!f(self) :
+        __.isObject(f)   ?   __checkProp(self, f) : is(self.value, f) )
     return self  }
 
-const __then = (o, f) => {
-    if (condition.get(o) === true )
-        __.isFunction(f) ? __func(f, o) : result.set(o, f)
-    return o  }
+const __then = (self, f) => {
+    if (logic.get(self) === true )
+        __.isFunction(f) ? __func(f, self) : result.set(self, f)
+    return self  }
 
-const __else = (o, f) => {
-    if (condition.get(o) === false)
-        __.isFunction(f) ? __func(f, o) : result.set(o, f)
-    return o  }
+const __else = (self, f) => {
+    if (logic.get(self) === false)
+        __.isFunction(f) ? __func(f, self) : result.set(self, f)
+    return self  }
 
-const __else_if = (o, f) => {
-    if (condition.get(o) === true )
-         condition.set( o, undefined )
-    else condition.set( o, __.isFunction(f) ? !!f(o) : !!f )
-    return o  }
+const __else_if = (self, f) => {
+    if ( logic.get(self) === true )
+         logic.set(self, undefined)
+    else logic.set(self, __.isFunction(f) ? !!f(self) : is(self.value, f) )
+    return self  }
 
 const __carry = (self, f, ...v) => {
     if (! __.isFunction(f)) return f
@@ -124,15 +137,6 @@ const __get = (o, ...keys) =>
 
 const __set = (o, k, v) =>
     o instanceof In$ ? o.set(k, v) : o[k] = v
-
-const is = (x, y) => {
-    if ( Object.is(x, y) ) return true
-    if ( 'object' !== typeof y || 'object' !== typeof x ||
-        x.constructor !== y.constructor ||
-        Object.keys(x).length !== Object.keys(y).length ) return false
-    for (let p in x)
-        if ( ! is(x[p], y[p]) ) return false
-    return true  }
 
 const __log = (self, ...args) => {
     if (args.length > 1) console.log( ...args, self.value )
@@ -268,7 +272,6 @@ class CashProperty {
     removeValuePropertyTo (...p)  {
         p.forEach( v => this.saveValuePropertyTo(v).delete(v)  )
         return this.self  }
-
     bindto (p, os, ps) {}
     on (e, p, f) {
         if (! (['onGet', 'onSet', 'onChange', 'onDelete'].includes(e) && this.has(p)) )
@@ -506,8 +509,8 @@ class In$ extends Object {
     openChain (f, ...args) {
         f(this.value, ...this.argument(...args))
         return this  }
-    chain (f, ...args)  { return this.take( f(this.value, ...this.argument(...args)) ) }
-    chainLinked (...f)  { return this.take( f.reduce( (a,v) =>
+    // chain (f, ...args)  { return this.take( f(this.value, ...this.argument(...args)) ) }
+    chain (...f)  { return this.take( f.reduce( (a,v) =>
         Array.isArray(v) ? v[0](a, ...v.slice(1)) : v(a) , this.value ) ) }
     // __unchain (v) { return this.loose(v) }
     loose (v) { return this.cut(v) }
@@ -546,7 +549,7 @@ class In$ extends Object {
     get firstKey ()  { return this.keys()[0] }
     get lastKey ()   { return this.keys()[ this.size() - 1 ] }
     get result ()    { return result.get(this)  }
-    get condition () { return condition.get(this)  }
+    get logic () { return logic.get(this)  }
     get value ()     {
         let value // return value if 6 non value: false, null, NaN, undefined, '', 0
         return (value = object.get(this)) ? value.valueOf() : value  }
@@ -700,7 +703,7 @@ class Object$ extends Object {
     get firstKey ()  { return this.keys()[0] }
     get lastKey ()   { return this.keys()[ this.size() - 1 ] }
     get result ()    { return result.get(this)  }
-    get condition () { return condition.get(this)  }
+    get logic () { return logic.get(this)  }
     get value ()     {
         let value // return value if 6 non value: false, null, NaN, undefined, '', 0
         return (value = object.get(this)) ? value.valueOf() : value  }
@@ -709,8 +712,13 @@ class Object$ extends Object {
 
 // let Object$ = In$
 const method = (name, func) =>
-    In$.prototype[name] = function (...v) {
-        return this.chain(func, ...v)  }
+    __.isObject(name) ? Object.keys(name).forEach( k =>
+        (In$.prototype[k] =
+            Array.isArray(name[k]) ?
+                function (...x) { return this.chain([...name[k]].concat(x)) } :
+                function (...x) { return this.chain([name[k], ...x]) }  ) )
+    :   (In$.prototype[name] = function (...v) {
+        return this.chain([func, ...v]) })
 
 class HtmlElement extends In$ { constructor (arg) { super(arg) } }
 ['appendChild', 'addEventListener'].forEach( v =>
@@ -785,19 +793,17 @@ class Xml extends In$ {
         return this.findEvery( p, (v, w) => w.delete(p) )  }  }
 
 //{Style: {"$id": "pline", LineStyle:{color: "ff00ff", width: 4} } }
+const newProp = (self, p, v) =>
+    Object.defineProperty(self, p, { value: v, enumberable: false })
+
 
 class Array$ extends Array {
     constructor (arg, self) {
         super()
-        if (self)
-            this.self = self
+        self && newProp(this, 'self', self)
         let value = arg instanceof Array$ ? arg.value : arg || []
-        Object.defineProperty(this, 'type', {
-            value: 'array'
-          , enumberable: false })
-        Object.defineProperty(this, 'source', {
-            value: value
-          , enumberable: false })
+        newProp(this, 'type',  'array')
+        newProp(this, 'source', value)
         if (value)
             for(let i = 0; i < value.length; i++)
                 this[i] = value[i]  }
@@ -923,11 +929,11 @@ class Array$ extends Array {
     valueOf ()    { return Array.from(this) }
     get value ()  { return Array.from(this) }
     get result ()    { return result.get(this)  }
-    get condition () { return condition.get(this) }  }
+    get logic () { return logic.get(this) }  }
 
-const __htmlTag = (o, tag, attr, ...a) =>
-    o.push$( HTML[tag](  attr, ...a.map(  v =>
-        __.isFunction(v) ? v( new Template(o) ) : v  )) )
+const __htmlTag = (self, tag, attr, ...a) =>
+    self.append([HTML[tag](  attr, ...a.map(  v =>
+        __.isFunction(v) ? v( new Template(self) ) : v  ))])
 
 class BlazView extends In$ {
     constructor (arg) {
@@ -950,13 +956,13 @@ class Template extends Array$ {
             name = arg.name
             arg = arg.view }
         property.set(this, {view: arg, name: name}) }
-    include (name, ...a) { return this.push$(
+    include (name, ...a) { return this.append([
         __.isUndefined(a)
                      ? cube.include(     this.view, name) :
         a.length === 1 && __.isBlazeElement(a[0])
                      ? cube.includeBlock(this.view, name, () => a) :
         a.length > 1 ? cube.includeAttrBlock(this.view, name, a[0], () => a.slice(1))
-                     : cube.includeAttr( this.view, name, a[0])  )}
+                     : cube.includeAttr( this.view, name, a[0]) ])}
     id    (v, ...a) { return __htmlTag(this, 'DIV', {id: v},    ...a) }
     class (v, ...a) { return __htmlTag(this, 'DIV', {class: v}, ...a) }
     toHTML () { return HTML.toHTML(this.value) }
@@ -993,10 +999,10 @@ let blazeAttr = (_, obj) => {
   return __.keys(o).length === 1 && o[__.theKey(o)] === '' ? __.theKey(o) : o }
 
 htmlTags.forEach(tag => Template.prototype[tag] = function(...arr) {
-    return this.push$( 0 === arr.length ? HTML[tag]() : HTML[tag](...arr.into$
+    return this.append([ 0 === arr.length ? HTML[tag]() : HTML[tag](...arr.into$
         .reduce$( (a,v) => a.append(
             mustacheAttr(v, cube.lookupInView.bind(null, this.view), this.view) ),
-            v=>__.isBlazeAttr(v[0]) ? [ blazeAttr(this.view, v.shift()) ].into$ : [].into$ ).value  ))  })
+            v=>__.isBlazeAttr(v[0]) ? [ blazeAttr(this.view, v.shift()) ].into$ : [].into$ ).value  )])  })
 
 
 class Function$ extends Function {
@@ -1017,7 +1023,7 @@ class Function$ extends Function {
     invoke (...v) { return this.value(...v) }
     get value ()     { return object.get(this)  }
     // get result ()    { return result.get(this)  }
-    // get condition () { return condition.get(this)  }
+    // get logic () { return logic.get(this)  }
     // get __ ()        { return object.get(this)  }  }
 }
 
@@ -1056,7 +1062,7 @@ class String$ extends String {
     // log (...f)       { return __log(this, ...f) }
     get value ()     { return this.valueOf()  }
     // get result ()    { return result.get(this)  }
-    // get condition () { return condition.get(this)  }
+    // get logic () { return logic.get(this)  }
     // get __ ()        { return this.valueOf()  }
 }
 
