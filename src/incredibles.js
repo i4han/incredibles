@@ -14,8 +14,15 @@ if ('undefined' === typeof Meteor) {
     bypassRequire('underscore2')  }
     // path = bypassRequire('path')  }
 
+const TYPES = ['object', 'array', 'string', 'function', 'date', 'code']
+
 let logic  = new WeakMap()
 let result = new WeakMap()
+let object     = new WeakMap()
+let property   = new Map() // getter, setter
+let descriptor = new Map() // descriptor, value
+let heap      = new Map()
+let vars       = new Map()
 
 const is = (x, y) => {
     if ( Object.is(x, y) ) return true
@@ -34,19 +41,22 @@ const __is = (answer, o, ...fn) =>
     fn.length === 2 ? answer ? fn[0](o) : fn[1](o)
                     : console.log('error: is')
 
-const __typeof = (self, type, ...fn) =>
-    fn.length === 0 ? self.type === type ? true        : false :
-    fn.length === 1 ? self.type === type ? fn[0](self) : false :
-    fn.length === 2 ? self.type === type ? fn[0](self) : fn[1](self)
-                    : console.log('error: typeof')
+const __type = (self, type) => {
+    result.set(self, self.type)
+    logic.set(self, self.type === type)
+    return self  }
 
 const __checkProp = (self, o) => {
     // console.log(0, Object.keys(o).map(k => self[k] === o[k]).every(v=>v))
     return Object.keys(o).map(k => self[k] === o[k]).every(v=>v) }
 
 const __if = (self, f) => {
-    logic.set( self, __.isFunction(f) ? !!f(self) :
-        __.isObject(f)   ?   __checkProp(self, f) : is(self.value, f) )
+    logic.set(    self, __.isFunction(f) ? !!f(self) : is(self.value, f) )
+    return self  }
+
+const __else_if = (self, f) => {
+    if (logic.get(self) === false)
+        logic.set(self, __.isFunction(f) ? !!f(self) : is(self.value, f) )
     return self  }
 
 const __then = (self, f) => {
@@ -57,12 +67,6 @@ const __then = (self, f) => {
 const __else = (self, f) => {
     if (logic.get(self) === false)
         __.isFunction(f) ? __func(f, self) : result.set(self, f)
-    return self  }
-
-const __else_if = (self, f) => {
-    if ( logic.get(self) === true )
-         logic.set(self, undefined)
-    else logic.set(self, __.isFunction(f) ? !!f(self) : is(self.value, f) )
     return self  }
 
 const __carry = (self, f, ...v) => {
@@ -109,7 +113,7 @@ const __propWritable = (self, p, w) => {
 
 const __assign = (self, ...prop) => {
     prop.forEach( p => {
-        p = p instanceof In$ ? p.value : p
+        p = p instanceof Bin$ ? p.value : p
         for ( let k in p )
             self.set(k, p[k]) })
     return self  }
@@ -131,12 +135,12 @@ const __invokeProperties = (o, self) => {
 
 const __get = (o, ...keys) =>
     __.isScalar(o) || !o ? undefined :
-    (! (o instanceof In$) && __.isObject(o)) || __.isArray(o) ?
+    (! (o instanceof Bin$) && __.isObject(o)) || __.isArray(o) ?
         keys.length === 1 ? o[keys[0]]     : __get( o[keys[0]],     ...keys.slice(1) ) :
         keys.length === 1 ? o.get(keys[0]) : __get( o.get(keys[0]), ...keys.slice(1) )
 
 const __set = (o, k, v) =>
-    o instanceof In$ ? o.set(k, v) : o[k] = v
+    o instanceof Bin$ ? o.set(k, v) : o[k] = v
 
 const __log = (self, ...args) => {
     if (args.length > 1) console.log( ...args, self.value )
@@ -166,25 +170,17 @@ const __at = (...args) => {
 // String.prototype.into$ = function() { return new String$(this) }
 
 
-let object     = new WeakMap()
-let property   = new Map() // getter, setter
-let descriptor = new Map() // descriptor, value
-let vars       = new Map()
 
 class WeakMap$ extends WeakMap {
     constructor (arg) {
         super(arg)
         this.type = 'weakmap' }
-    typeof (type, ...fn) {
-        return __typeof(this, type, ...fn )  }
 }
 
 class Map$ extends Map {
     constructor (arg) {
         super(arg)
         this.type = 'map'  }
-    typeof (type, ...fn) {
-        return __typeof(this, type, ...fn )  }
 }
 
 let bind = new Map$()
@@ -272,9 +268,8 @@ class CashProperty {
     removeValuePropertyTo (...p)  {
         p.forEach( v => this.saveValuePropertyTo(v).delete(v)  )
         return this.self  }
-    bindto (p, os, ps) {}
     on (e, p, f) {
-        if (! (['onGet', 'onSet', 'onChange', 'onDelete'].includes(e) && this.has(p)) )
+        if (! (['onGet', 'onSet', 'onChange', 'onDelete', 'onError'].includes(e) && this.has(p)) )
             return this.self
         this.descriptor[p][e] = f
         return this.self  }  }
@@ -284,21 +279,22 @@ const __copy = v =>
     Array.isArray(v)    ? Object.assign([], v) :
     __.isObject(v)      ? Object.assign({}, v) : v
 
+const value = v => // && 'object' === typeof v.$
+    'object' === typeof v && Object.getOwnPropertyNames(v).includes('value') ?
+        v.value : v
+
 const __init = (self, ...args) => {
+    // console.log(args, args[0])
     let arg = args.length > 0 ? args[0] : {}
     let type = args[1]
     // console.log(arg, type, isTypeof(arg, type, 'function', Function, Function$))
-    if ( self.unchained ) {
-        // console.log(9, arg, 'unchained', self.value)
-        return from(__copy(arg), type)  }
-    if ( arg instanceof In$ )
-        arg = arg.value
-    if ( undefined === arg ) {
-        self.type = 'undefined'
-        object.set(self, arg)  }
-    else if ( null === arg || Object.is(NaN, arg) ) {
-        self.type = 'value'
-        object.set(self, arg)  }
+    if ( self.unchained )
+        return from(__copy(arg), type)
+    arg = value(arg)
+    if ( undefined === arg || 'boolean' === typeof arg ||
+        null === arg || Object.is(NaN, arg) ) {
+        self.primitive = new Primitive(arg, self)
+        object.set(self, self.primitive)  }
     else if ( isTypeof(arg, 'array', type) ) {
         self.type = 'array'
         if (arg instanceof Array$)
@@ -306,17 +302,17 @@ const __init = (self, ...args) => {
         else
             self.array = new Array$(arg, self)
         object.set(self, arg)  } // self.array?
-    else if ( isTypeof(arg, 'string', type ) ) {
+    else if ( isTypeof(arg, 'string',   type ) ) {
         self.type = 'string'
-        self.string    = new String$(arg, self)
+        self.string   = new String$(arg, self)
         object.set(self, self.string)  }
-    else if ( isTypeof(arg, 'number', type ) ) {
+    else if ( isTypeof(arg, 'number',   type ) ) {
         self.type = 'number'
-        self.number    = new Number$(arg, self)
+        self.number   = new Number$(arg, self)
         object.set(self, self.number)  }
     else if ( isTypeof(arg, 'function', type ) ) {
         self.type = 'function'
-        self.function  = new Function$(arg, self)
+        self.function = new Function$(arg, self)
         object.set(self, self.function)  }
     else if ( 'code' === type ) {
         self.type = 'code'
@@ -326,22 +322,20 @@ const __init = (self, ...args) => {
         object.set(self, arg) }
     return self  }
 
-class In$ extends Object {
+class Bin$ extends Object {
     constructor (arg, type) {
         super()
         __init(this, arg, type)
         this.cash = new CashProperty(this)  }
         // property.set(this, {}) Yes. arg can be an array.
+        // type, unchained, freeze, writable
+        // result, logic,
+        // error
     take (arg, type) { return __init(this, arg, type) }
     get $ () { return this.cash.prop }
-    is (obj, ...fn) {
+    __is (obj, ...fn) {
         return __is( is(this.value, obj), this.value, ...fn)  }
-    if_type (type) {
-        return __if(this, this.type === type)  }
-    else_if_type (type) {
-        return __else_if(this, this.type === type)  }
-    typeof (type, ...fn) {
-        return __typeof(this, type, ...fn )  }
+    typeof(type) { return __type(this, type) }
     if (f)      { return __if(this, f)   }
     then (f)    { return __then(this, f) }
     else (f)    { return __else(this, f) }
@@ -350,6 +344,9 @@ class In$ extends Object {
     openCarry (f, ...v) { return __run(this, f, ...v)   }
     log (...f)  { return __log(this, ...f)  }
     prop (...p) { return __prop(this, ...p) }
+    error (code, v) {
+        console.log(code, v)
+        return this }
     // backupPropTo (...p)  {
     //     p.forEach(  v =>
     //         __prop(this, '@prop:' + v, this.at(v) )  )
@@ -368,15 +365,10 @@ class In$ extends Object {
         if ( keys.length > 1 ) keys.map( v => delete this.value[v] )
         else delete this.value[ keys[0] ]
         return this  }
-
     add (...o) {
         return __add(this, ...o)  }
-
     set (key, value) {
-        //this[key] = value Object.assign
-        // console.log(0, key, value)
-        this.value[key] = value
-        return this  }
+        return this.void( this.value[key] = value )  }
     setAt (...args) {
         let value = args[ args.length - 1 ]
         let k = args.slice(0, args.length - 1).join('.').split('.')
@@ -388,15 +380,15 @@ class In$ extends Object {
         let o0 = this.get(k[0])
         o0 = this.set(k[0], o0 ||
             (Number(k[1]).toString() === k[1] ? [] : {}) ).get(k[0])
-        let wo0 = new In$(o0)
+        let wo0 = new Bin$(o0)
         k.length === 2 ?
             __set (o0, k[1], value) : wo0.setAt(...k.slice(1), value)
         return this  }
     // __dset (...v) { return this.setAt(...v) }
     // oset (...obj) { return this.assign (...obj) }
-    assign (...obj) {  // assign
+    assign (...obj) {  // assign this.add is recursive, assign is not
         __assign(this, obj[0])  // recursive obj reference assign
-        return obj.length > 1 ? this.assign( ...obj.slice(1) ) : this }
+        return obj.length > 1 ? this.assign( ...obj.slice(1) ) : this  }
     zip (key, value) { //   aset(['a', 'b', 'c'], [1,2,3])
         key.forEach( (v, i) => this.set( v, value[i] ) )
         return this  }
@@ -413,6 +405,8 @@ class In$ extends Object {
         else if (args.length === 2)
             args[0][args[1]] = this.value
         return this  }
+    // take, put -> from, to, resultTo, logicTo
+    // from('a') resultFrom('a'), logicFrom('a')
     setResult (v) { return this.void( result.set(this, v) ) }
     void () { return this }
     get (...key) {
@@ -481,7 +475,7 @@ class In$ extends Object {
     recursive (f) {
         return __recursive(this, f)  }
     copy (o)  {
-        if (this.typeof('string'))
+        if (this.typeof('string').logic)
             return new Object$(this.value, this.type)
         else {
             o = o || {}
@@ -560,7 +554,41 @@ class In$ extends Object {
 class Object$ extends Object {
     constructor (arg, type) {
         super()
-        object.set(this, arg)  }
+        object.set(this, arg)
+        descriptor.set(this, {})
+        heap.set(this, {})
+    }
+    reactive (p, v, o) {
+        let descObj = descriptor.get(this)  // bindTo onGet, onSet, onError
+        let val  = heap.get(this)           // debug, UnneededAssigm
+        let desc = descObj[p] = {bindTo:[]}
+        val[p] = v
+        Object.defineProperty(this.value, p, Object.assign({
+            enumberable:  true
+          , configurable: false
+          , get: function () {
+                if (desc.onGet)
+                     return desc.onGet(val[p], this.self) // e = {newValue, oldValue, valueobj}
+                else return val[p]  }
+          , set: function (w) {
+                if (desc.onSet)
+                    w = desc.onSet(w, val[p], this.self)
+                if (val[p] !== w) { // skip if value is same
+                    val[p] = w
+                    desc.bindTo.forEach( x => x[0][x[1]] = w ) }
+                return   }  }, o))
+        return this  }
+    reactives (obj, o) {
+        Object.keys(obj).forEach( p => this.reactive(p, obj[p], o) )
+        return this  }
+    descriptor (p) { return descriptor.get(this)[p] }
+    on (e, p, f) {
+        if (! ['get', 'set', 'error'].includes(e) ) // change, delete
+            return this.self
+        this.descriptor(p)[ 'on' + e[0].toUpperCase() + e.slice(1) ] = f
+        return this.self  }
+    bindTo (p, o, prop) {
+        this.descriptor(p).bindTo.push([o, prop]) }
     delete (...keys) {
         if ( keys.length > 1 ) keys.map( v => delete this.value[v] )
         else delete this.value[ keys[0] ]
@@ -581,7 +609,7 @@ class Object$ extends Object {
         let o0 = this.get(k[0])
         o0 = this.set(k[0], o0 ||
             (Number(k[1]).toString() === k[1] ? [] : {}) ).get(k[0])
-        let wo0 = new In$(o0)
+        let wo0 = new Bin$(o0)
         k.length === 2 ?
             __set (o0, k[1], value) : wo0.setAt(...k.slice(1), value)
         return this  }
@@ -617,9 +645,12 @@ class Object$ extends Object {
     clear () {
         object.set(this, {})
         return this  }
-    has (k) {
-        return k in this.value  }
-    includes (v) {}
+    has (k) { return k in this.value  }
+    includes (v) { return this.entries().includes(v) }
+    keys ()      { return Object.keys( this.value ) }
+    values ()    { return this.keys().map( k => this.get(k) ) }
+    entries ()   { return Object.entries(this.value) }
+    valueOf ()   { return this.value }
     forEach (f) {
         this.keys().forEach( k => f( this.get(k), k, this ) )
         return this  }
@@ -635,15 +666,10 @@ class Object$ extends Object {
         for (let p in this.value)
             accumulator = f( accumulator, this.get(p), p, this)
         return accumulator  }
-    keys ()    { return Object.keys( this.value ) }
-    values ()  {
-        return this.keys().map( k => this.get(k) )  }
     // MVCObject bindto, addListener, changed, notify
     // entries () {
     //     return this.keys().map( k => [k, this.get(k)] )  }
     // assign (...o)  { return Object.assign(this.__, ...o) }
-    entries ()  { return Object.entries(this.value) }
-    valueOf ()   { return this.value }
     // toString ()  { return this.value.toString() }
     // unwatch (p)  { return this.value.unwatch(p) }
     // watch (p, handler) { return this.value.watch(p, handler) }
@@ -658,7 +684,7 @@ class Object$ extends Object {
     recursive (f) {
         return __recursive(this, f)  }
     copy (o)  {
-        if (this.typeof('string'))
+        if (this.typeof('string').logic)
             return new Object$(this.value, this.type)
         else {
             o = o || {}
@@ -700,27 +726,30 @@ class Object$ extends Object {
         result.set(this, this.shift())
         return this  }
 
-    get firstKey ()  { return this.keys()[0] }
-    get lastKey ()   { return this.keys()[ this.size() - 1 ] }
-    get result ()    { return result.get(this)  }
-    get logic () { return logic.get(this)  }
-    get value ()     {
-        let value // return value if 6 non value: false, null, NaN, undefined, '', 0
-        return (value = object.get(this)) ? value.valueOf() : value  }
-}
+    bindto (p, os, ps) {}
+    validate (p, f) {}
+
+    get firstKey () { return this.keys()[0] }
+    get lastKey ()  { return this.keys()[ this.size() - 1 ] }
+    get result () { return result.get(this) }
+    get logic ()  { return logic.get(this)  }
+    get value ()  {
+        let value = object.get(this)
+        return value ? value.valueOf() : value  }
+} // return value if 6 non value: false, null, NaN, undefined, '', 0
 
 
-// let Object$ = In$
+// let Object$ = Bin$
 const method = (name, func) =>
     __.isObject(name) ? Object.keys(name).forEach( k =>
-        (In$.prototype[k] =
+        (Bin$.prototype[k] =
             Array.isArray(name[k]) ?
                 function (...x) { return this.chain([...name[k]].concat(x)) } :
                 function (...x) { return this.chain([name[k], ...x]) }  ) )
-    :   (In$.prototype[name] = function (...v) {
+    :   (Bin$.prototype[name] = function (...v) {
         return this.chain([func, ...v]) })
 
-class HtmlElement extends In$ { constructor (arg) { super(arg) } }
+class HtmlElement extends Bin$ { constructor (arg) { super(arg) } }
 ['appendChild', 'addEventListener'].forEach( v =>
     HtmlElement.prototype[v] = function (...x) {
         return this.setResult( this.value[v](...x) )  })
@@ -737,7 +766,7 @@ const xmlObject = o => {
             value[p] = [o[p].toString()] }
     return value  }
 
-class Xml extends In$ {
+class Xml extends Bin$ {
     constructor (arg) {
         const stepIn = o => {
             let keys = Object.keys(o)
@@ -792,21 +821,86 @@ class Xml extends In$ {
     removeEvery (p) {
         return this.findEvery( p, (v, w) => w.delete(p) )  }  }
 
-//{Style: {"$id": "pline", LineStyle:{color: "ff00ff", width: 4} } }
-const newProp = (self, p, v) =>
-    Object.defineProperty(self, p, { value: v, enumberable: false })
-
+let cashProp = (self, p, bin) => {
+    Object.defineProperty(self, p, { value: {}, enumberable: false })
+    return self[p].bin = new Object$(self[p], bin) }
 
 class Array$ extends Array {
-    constructor (arg, self) {
+    constructor (arg, bin) {
         super()
-        self && newProp(this, 'self', self)
         let value = arg instanceof Array$ ? arg.value : arg || []
-        newProp(this, 'type',  'array')
-        newProp(this, 'source', value)
+        cashProp( this, '$', bin )
+        .reactive('bin',    bin )
+        .reactive('source', value )
+        .reactive('type',  'array')
+        .on('set', 'type', (function (v, ov, self) { TYPES.includes(v) ? v : this.error(ov) }).bind(this) )
         if (value)
             for(let i = 0; i < value.length; i++)
                 this[i] = value[i]  }
+    error (v) {
+        console.log('error')
+        return v  }
+    carry (f, ...v)   { return __carry(this, f, ...v) }
+    out (v) {
+        v = undefined === v ? ' ' : v
+        console.log( this.join(v) )
+        return this }
+    get (i)    { return this[i]  }
+    set (i, v) { return this[i] = v  }
+    reload () {
+        let origin = this.$.source
+        this.length = 0
+        for(let i = 0; i < origin.length; i++)
+             this[i] = origin[i]
+        return this  }
+    sync () {
+        let origin = this.$.source
+        origin.length = 0
+        for(let i = 0; i < this.length; i++)
+            origin[i] = this[i]
+        return this  }
+    append (a) {
+        Array.isArray(a) && this.push(...a)
+        return this  }
+    reduceFn (f, initialValue) {
+        return from( this.reduce(f, initialValue(this)) )  }
+    unique (f) {
+        f = f || (v => w => v === w)
+        return this.filter( (v, i) => this.findIndex( f(v, i) ) === i )  }
+    intersection (b, f) {
+        let bIndex
+        f = f || (v => w => v === w)
+        if ( b instanceof Bin$ )
+            b = b.array
+        let ret = new Array$()
+        this.forEach( (v,i) => b.findIndex( f(v, i) ) !== -1 && ret.push(v)  )
+        return ret  }
+    difference (b, f) {
+        f = f || (v => w => v === w)
+        if ( b instanceof Bin$ )
+            b = b.array
+        return this.filter( (v,i) => b.findIndex( f(v, i) ) === -1 )  }
+    union (b, f) {
+        f = f || (v => w => v === w)
+        if ( b instanceof Bin$ )
+            b = b.array
+        if ( ! (b instanceof Array$) )
+            b = new Array$(b)  // to check b is array
+        let ret = this.$.bin.unchained ? __copy(this) : this
+        return ret.append(b.filter( (v,i) => this.findIndex( f(v, i) ) === -1 ) ) }
+    sum (f) {
+        f = f || (v => v)
+        return this.reduce(((a,v) => a += f(v)), 0) }
+    count (f) {
+        f = f || (v => v)
+        return this.reduce(((a,v) => __.isNumber(f(v)) ? a += 1 : a), 0)  }
+    average (f) {
+        return this.sum(f) / this.count(f)  }
+    valueOf ()    { return Array.from(this) }
+    get value ()  { return Array.from(this) }
+    get result () { return result.get(this) }
+    get logic ()  { return logic.get(this)  }  }
+
     //
     // is (a, ...fn) {
     //     return __is(  is(this.value, a.valueOf() ), this, ...fn ) }
@@ -830,27 +924,6 @@ class Array$ extends Array {
     //     f = f || (v => undefined !== v)
     //     return f(v) ? v : this.prop(p)  }
     // log (...f)  { return __log(this, ...f)  }
-    carry (f, ...v)   { return __carry(this, f, ...v) }
-    out (v) {
-        v = undefined === v ? ' ' : v
-        console.log( this.join(v) )
-        return this }
-
-
-    get (i)    { return this[i]  }
-    set (i, v) { return this[i] = v  }
-    reload () {
-        let origin = this.source
-        this.length = 0
-        for(let i = 0; i < origin.length; i++)
-             this[i] = origin[i]
-        return this  }
-    sync () {
-        let origin = this.source
-        origin.length = 0
-        for(let i = 0; i < this.length; i++)
-            origin[i] = this[i]
-        return this  }
     // find$ (f) {
     //     return from( this.find(f) )  }
     // push$ (...arg) {
@@ -866,11 +939,6 @@ class Array$ extends Array {
     // unshift$ (...v) {
     //     this.unshift(...v)
     //     return this  }
-    append (a) {
-        Array.isArray(a) && this.push(...a)
-        return this  }
-    reduceFn (f, initialValue) {
-        return from( this.reduce(f, initialValue(this)) )  }
     // map    (...args) { return Array$(object.get(this).map    (...args)) }
     // forEach(...args) { return Array$(object.get(this).forEach(...args)) }
     // filter (...args) { return Array$(object.get(this).filter (...args)) }
@@ -878,38 +946,6 @@ class Array$ extends Array {
     // concat (...args) { return Array$(object.get(this).concat (...args)) }
     // slice  (...args) { return Array$(object.get(this).slice  (...args)) }
     // splice (...args) { return Array$(object.get(this).splice (...args)) }
-    unique (f) {
-        f = f || (v => w => v === w)
-        return this.filter( (v, i) => this.findIndex( f(v, i) ) === i )  }
-    intersection (b, f) {
-        let bIndex
-        f = f || (v => w => v === w)
-        if ( b instanceof In$ )
-            b = b.array
-        let ret = new Array$()
-        this.forEach( (v,i) => b.findIndex( f(v, i) ) !== -1 && ret.push(v)  )
-        return ret  }
-        // return this.reduce(  ((a,v,i) => {
-        //     if ( ( bIndex = b.findIndex( f(v, i) ) ) !== -1 )
-        //         return a.concat(
-        //             __.isObject(v) ? v.set( b[bIndex] ) : v )
-        //     else return a  }), new Array$()  )  }
-    difference (b, f) {
-        f = f || (v => w => v === w)
-        if ( b instanceof In$ )
-            b = b.array
-        return this.filter( (v,i) => b.findIndex( f(v, i) ) === -1 )  }
-    union (b, f) {
-        f = f || (v => w => v === w)
-        if ( b instanceof In$ )
-            b = b.array
-        if ( ! (b instanceof Array$) )
-            b = new Array$(b)  // to check b is array
-        let ret = this.self.unchained ? __copy(this) : this
-        return ret.append(b.filter( (v,i) => this.findIndex( f(v, i) ) === -1 ) ) }
-        // return this.difference(b, f)
-        //     .concat(this.intersection(b, f))
-        //     .concat(b.difference(this, f))  }
     // xmap (b, f) { f(v, w, i, a) }
     // __coMap (b, f) {
     //     return this.reduce((a, v, i) => {
@@ -921,21 +957,12 @@ class Array$ extends Array {
     // delete (i, n, ...v) {
     //     this.splice(i, n, ...v)
     //     return this }
-    sum (f) {
-        f = f || (v => v)
-        return this.reduce(((a,v) => a += f(v)), 0)  }
-    average (f) {
-        return this.sum(f) / this.length  }
-    valueOf ()    { return Array.from(this) }
-    get value ()  { return Array.from(this) }
-    get result ()    { return result.get(this)  }
-    get logic () { return logic.get(this) }  }
 
 const __htmlTag = (self, tag, attr, ...a) =>
     self.append([HTML[tag](  attr, ...a.map(  v =>
         __.isFunction(v) ? v( new Template(self) ) : v  ))])
 
-class BlazView extends In$ {
+class BlazView extends Bin$ {
     constructor (arg) {
         property.set(this, {view: arg, name: name}) }
     lookup () {}
@@ -1004,149 +1031,93 @@ htmlTags.forEach(tag => Template.prototype[tag] = function(...arr) {
             mustacheAttr(v, cube.lookupInView.bind(null, this.view), this.view) ),
             v=>__.isBlazeAttr(v[0]) ? [ blazeAttr(this.view, v.shift()) ].into$ : [].into$ ).value  )])  })
 
-
 class Function$ extends Function {
-    constructor (arg, self) {
+    constructor (v, bin) {
         super()
-        this.type = 'function'
-        this.self = self
-        object.set(this, arg)  }
-    // typeof (type, ...fn) {
-    //     return __typeof(this, type, ...fn)  }
-    // if (f)      { return __if(this, f)      }
-    // then (f)    { return __then(this, f)    }
-    // else (f)    { return __else(this, f)    }
-    // else_if (f) { return __else_if(this, f) }
-    // carry (f)   { return __carry(this, f)   }
-    // prop (...p) { return __prop(this, ...p) }
-    // log (...f)  { return __log(this, ...f)  }
-    invoke (...v) { return this.value(...v) }
-    get value ()     { return object.get(this)  }
-    // get result ()    { return result.get(this)  }
-    // get logic () { return logic.get(this)  }
-    // get __ ()        { return object.get(this)  }  }
+        cashProp(this, '$', bin).reactives({
+            type: 'function'
+          , bin:   bin
+          , value: value(v)  })  }
+    invoke (...v) { return this.$.value(...v) }
+    get value ()  { return this.$.value  }
 }
 
 class String$ extends String {
-    constructor (arg, self) {
-        arg = arg instanceof In$ ||
-              arg instanceof String$ ? arg.value : arg
-        super(arg)
-        this.self = self
-        this.type = 'string' }
-    // is (str, ...fn) {
-    //     return __is( str.valueOf() === this.value, this, ...fn )  }
-    // typeof (type, ...fn) {
-    //     return __typeof(this, type, ...fn)  }
-    // if (f)      { return __if(this, f)      }
-    // then (f)    { return __then(this, f)    }
-    // else (f)    { return __else(this, f)    }
-    // else_if (f) { return __else_if(this, f) }
-    // carry (f)   { return __carry(this, f)   }
-    // prop (...p) { return __prop(this, ...p) }
-    //
-    // __path (...str) { // path$
-    //     return new String$( path.join( this.value, ...(str.map(v => v.valueOf())) ) ) }
-    camelize () {
+    constructor (v, bin) {
+        // arg = arg instanceof Bin$ ||
+        //       arg instanceof String$ ? arg.value : arg
+        super(value(v))
+        cashProp(this, '$', bin).reactives({
+            type: 'string'
+          , bin:   bin  })  }
+    camelize ()  {
         return this.replace( /-([a-z])/g, (_, $1) => $1.toUpperCase() ) }
     dasherize () {
         return this.replace( /([A-Z])/g,  $1 => '-' + $1.toLowerCase() ) }
-    // __require$ () {
-    //     return new Object$( require(this.__) )  }
-    // __parseJson$ () {
-    //     return new Object$( JSON.parse(this.__) )  }
-    // __invoke (f) {
-    //     return f(this.__, this)  }
-    // __invoke$ (f) {
-    //     return from( this.invoke(f) )  }
-    // log (...f)       { return __log(this, ...f) }
-    get value ()     { return this.valueOf()  }
-    // get result ()    { return result.get(this)  }
-    // get logic () { return logic.get(this)  }
-    // get __ ()        { return this.valueOf()  }
+    get value () { return this.valueOf()  }
 }
 
 
 class Number$ extends Number {
-    constructor (arg, self) {
-        super(arg instanceof Number$ ? arg.value : arg)
-        if (self) {
-            this.self = self
-            this.type = 'number' } }
+    constructor (v, bin) {
+        super(value(v))
+        cashProp(this, '$', bin).reactives({
+            type: 'number'
+          , bin:   bin  })  }
     get value () { return this.valueOf() }
 }
 
-// let Number$ = v => v instanceof Number$ ? v : new Number$(v)
-class Boolean$ extends Boolean {
-    constructor (arg, self) {
-        super(arg instanceof Boolean$ ? arg.value : arg)
-        if (self) {
-            this.self = self
-            this.self.type = 'boolean'  }  }
-    get value () { return this.valueOf() }
-}
 
-// let Boolean$ = v => v instanceof Boolean$ ? v :new Boolean$(v)
 class Date$ extends Date {
-    constructor (arg, self) {
-        super(arg)
-        if (self) {
-            this.self = self
-            this.self.type = 'date'  }  }
+    constructor (v, bin) {
+        super(value(v))
+        cashProp(this, '$', bin).reactives({
+            type: 'date'
+          , bin:   bin  })  }
     get value () { return this.valueOf() }
 }
 
-class Buffer$ extends Buffer {
-    constructor (arg, self) {
-        super(arg)
-        if (self) {
-            this.self = self
-            this.self.type = 'buffer' }  }
-    get value () { return this.valueOf() }
-}
-
-class Value {
-    constructor (arg, self) {
-        this.value = arg
-        if (self) {
-            this.self = self
-            this.self.type = 'value' } }
+class Primitive {
+    constructor (v, bin) {
+        cashProp(this, '$', bin).reactives({
+            type: 'primitive'
+          , value: v
+          , bin:   bin  })  }
+    get value () { return this.$.value }
 }
 
 let from = v => {
-    if ( v instanceof Date )     return new Date$    (v)
-    // else if ( __.isFunction(v) ) return new Object$  (v, 'function')
-    else if ( __.isFunction(v) ) return new In$  (v, 'function')
-    else if ( __.isObject  (v) ) return new In$  (v, 'object')
-    else if ( __.isArray   (v) ) return new In$  (v, 'array')
-    else if ( __.isString  (v) ) return new In$  (v, 'string')
-    // else if ( __.isString  (v) ) return new String$  (v)
-    else if ( __.isNumber  (v) ) return new Number$  (v) // NaN is not here
-    else if ( __.isBoolean (v) ) return new Boolean$ (v)
+    if ( v instanceof Date )     return new Bin$ (v, 'date'  )
+    else if ( __.isFunction(v) ) return new Bin$ (v, 'function')
+    else if ( __.isObject  (v) ) return new Bin$ (v, 'object')
+    else if ( __.isArray   (v) ) return new Bin$ (v, 'array' )
+    else if ( __.isString  (v) ) return new Bin$ (v, 'string')
+    else if ( __.isNumber  (v) ) return new Bin$ (v, 'number') // NaN is not here
+    else if ( __.isBoolean (v) ) return new Bin$ (v, 'primitive')
     else if ( undefined === v || null === v || Object.is(NaN, v) )
-        return new Value(v) // null, undefined, NaN,
-    else return v  }
+        return new Bin$(v, 'primitive') // null, undefined, NaN,
+}
 
 let strip = v => {
-    if ( v instanceof In$ ) v = v.value
+    if ( v instanceof Bin$ ) v = v.value
     if ( v instanceof String$ || v instanceof Function$ ) v = v.value
     return v ? v.valueOf() : v  }
 
-let code = str => new In$(str[0], 'code')
+let code = str => new Bin$(str[0], 'code')
 // let range = (start, end, step) =>
 
 from({
     array: ['length']
 })
 .forEach( (v,k)=>
-    v.forEach( w => In$.prototype[w] = function (...x) {
+    v.forEach( w => Bin$.prototype[w] = function (...x) {
         return this[k].value[w]  })  )
 
 from({
-    array: ['sync', 'reload']
+    array:    ['sync', 'reload']
 })
 .forEach( (v,k)=>
-    v.forEach( w => In$.prototype[w] = function (...x) {
+    v.forEach( w => Bin$.prototype[w] = function (...x) {
         this[k][w](...x)
         return this  })  )
 
@@ -1154,7 +1125,7 @@ from({
     array: ['push', 'pop', 'shift', 'unshift', 'splice', 'append']
 })
 .forEach( (v,k)=>
-    v.forEach( w => In$.prototype[w] = function (...x) {
+    v.forEach( w => Bin$.prototype[w] = function (...x) {
         return this.setResult( this[k][w](...x) )  })  )
 
 
@@ -1172,7 +1143,7 @@ from({
   , function: ['invoke']
 })
 .forEach(  (v,k)=>
-    v.forEach(   w => In$.prototype[w] = function (...x) {
+    v.forEach(  w => Bin$.prototype[w] = function (...x) {
         return this.take( this[k][w](...x) )  })  )
 
 
@@ -1181,15 +1152,15 @@ if (prop) {
     Object.defineProperty(  Object.prototype,   prop, {
         enumerable:   false
       , configurable: true
-      , get: function () { return new In$  (this, 'object') }  })
+      , get: function () { return new Bin$  (this, 'object') }  })
     Object.defineProperty(  Function.prototype, prop, {
         enumerable:   false
       , configurable: true
-      , get: function () { return new In$  (this, 'function') }  })
+      , get: function () { return new Bin$  (this, 'function') }  })
     Object.defineProperty(  String.prototype,   prop, {
         enumerable:   false
       , configurable: true
-      , get: function () { return new In$  (this, 'string') }  })
+      , get: function () { return new Bin$  (this, 'string') }  })
     Object.defineProperty(  Array.prototype,    prop, {
         enumerable:   false
       , configurable: true
@@ -1197,25 +1168,22 @@ if (prop) {
     Object.defineProperty(  Date.prototype,     prop, {
         enumerable:   false
       , configurable: true
-      , get: function () { return new Date$    (this) }  })
+      , get: function () { return new Bin$  (this, 'date'  ) }  })
     Object.defineProperty(  Number.prototype,   prop, {
         enumerable:   false
       , configurable: true
-      , get: function () { return new Number$  (this) }  })
+      , get: function () { return new Bin$  (this, 'number') }  })
     Object.defineProperty(  Boolean.prototype,  prop, {
         enumerable:   false
       , configurable: true
-      , get: function () { return new Boolean$ (this) }  })
-    Object.defineProperty(  Buffer.prototype,   prop, {
-        enumerable:   false
-      , configurable: true
-      , get: function () { return new In$  (this.toString(), 'buffer') }  })  }
+      , get: function () { return new Bin$  (this, 'primitive') }  })
+}
 
 
 let exported = {
     from:      from
   , code:      code
-  , In$:       In$
+  , Bin$:      Bin$
   , Map$:      Map$
   , Object$:   Object$
   , Array$:    Array$
@@ -1223,19 +1191,18 @@ let exported = {
   , Date$:     Date$
   , String$:   String$
   , Number$:   Number$
-  , Boolean$:  Boolean$
-  , Value:     Value
+  , Primitive:    Primitive
   , CashProperty: CashProperty
   , Xml:       Xml
   , map:       v => new Map$(v)
-  , in:        (v, type) => new In$(v, type)
+  , bin:      (v, type) => new Bin$(v, type)
   , function:  v => new Function$(v)
   , date:      v => new Date$(v)
   , object:    v => new Object$(v)
   , array:     v => new Array$(v)   // range(1,20) (2,20,3)
   , string:    v => new String$(v)
   , number:    v => new Number$(v)
-  , boolean:   v => new Boolean$(v)
+  , primitive: v => new Primitive(v)
   , module:    v => __.Module(v)
   , template:   (v, name) => new Template(v, name)
   , htmlElement: v        => new HtmlElement(v)
@@ -1263,7 +1230,6 @@ meteor.getUrlfromSettings = p => {
 let types = {
     string:   [String,   String$]
   , number:   [Number,   Number$]
-  , boolean:  [Boolean,  Boolean$]
   , function: [Function, Function$]
 }
 
@@ -1304,10 +1270,6 @@ function type (v, type) {
 // if ('undefined' !== typeof Meteor)
 exported.meteor = meteor
 
-if ( ! ('in$' in global) )
+if ( !('in$' in global) )
     global.in$ = exported
-global.re = () => {
-    delete require.cache[process.env.INCREDIBLES_PATH.into$.path('src','incredibles.js').value ]
-    require('incredibles')  }
-
-module.exports  = exported
+module.exports = exported

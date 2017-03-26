@@ -1,7 +1,7 @@
 
 let in$ = require('../src/incredibles.js')
 
-describe(  "In$", () => {
+describe(  "Bin$", () => {
     let a = in$.from({a:1, b:3, c:3, d:4})
     let b = in$.from({})
     let c = in$.from({a: o => o.name})
@@ -11,7 +11,7 @@ describe(  "In$", () => {
     it("set",
         () => expect(b.set('a', 4).value)    .toEqual({a:4})  )
     it("is",
-        () => expect(b.is({a: 4}))         .toEqual(true)  )
+        () => expect(b.if({a: 4}).logic)         .toEqual(true)  )
     it("dset",
         () => expect(b.setAt('b.c', 3).value).toEqual({a:4,b:{c:3}})  )
     it("delete",
@@ -41,13 +41,13 @@ describe(  "In$", () => {
     it("restore",
         () => expect(b.cash.restoreValuePropertyFrom('c').value)       .toEqual({c:4, b:6})  )
     it("is",
-        () => expect(b.is({c:4, b:6}))     .toEqual(true)  )
+        () => expect(b.if({c:4, b:6}).logic)     .toEqual(true)  )
     it("is with true callback",
-        () => expect(b.is({c:4, b:6}, () => 'ok')).toEqual('ok')  )
+        () => expect(b.if({c:4, b:6}).then(v => 'ok').result).toEqual('ok')  )
     it("typeof",
-        () => expect(b.typeof('object'))          .toEqual(true)  )
+        () => expect(b.typeof('object').logic) .toEqual(true)  )
     it("typeof with true callback",
-        () => expect(b.typeof('object', () => 'good')).toEqual('good')  )
+        () => expect(b.typeof('object').then(v=>'good').result).toEqual('good')  )
     it("evalProperties type 1",
         () => expect(c.invokeProperties({name: 'ok'}).value).toEqual({a:'ok'})  )
     it("evalProperties type 2",
@@ -62,27 +62,27 @@ describe(  "Array$", () => {
     it("is",
         () => expect(a.if([1,2,3,4,5]).logic).toEqual(true) )
     it("typeof",
-        () => expect(a.if({type: 'array'}).logic).toEqual(true) )
+        () => expect(a.typeof('array').logic).toEqual(true) )
     it("typeof returns true",
-        () => expect(a.if({type: 'array'}).then(v => 21).result).toEqual(21)  )
+        () => expect(a.typeof('array').then(v => 21).result).toEqual(21)  )
     it("typeof returns false",
-        () => expect(a.if({type: 'object'}).else(23).result).toEqual(23)  )
+        () => expect(a.typeof('object').then(21).else(23).result).toEqual(23)  )
     it("length",
         () => expect(in$.from([1,1,1,1,1]).size()).toEqual(5)  )
     it("findIndex",
         () => expect(a.cut().findIndex(v => v === 2).value).toEqual(1) )
     it("find",
-        () => expect(a.find(v => v === 5).value).toEqual(in$.from(5))  )
+        () => expect(a.find(v => v === 5).value).toEqual(5) )
     it("union",
         () => expect(a.union(b).value) .toEqual([1,2,3,4,5,6,7,8])  )
     it("intersection",
         () => expect(a.intersection(b).value).toEqual([4,5]) )
     it("difference",
-        () => expect(a.difference(b).value).toEqual([1,2,3]) )
+        () => expect(a.difference(b).value)  .toEqual([1,2,3]) )
     it("'is' returns true",
         () => expect(a.if([1,2,3,4,5]).logic).toEqual(true)  )
     it("'is' returns false",
-        () => expect(a.if([1,2,3,4]).logic) .toEqual(false)  )
+        () => expect(a.if([1,2,3,4]).logic)  .toEqual(false)  )
 })
 
 describe(  "Function", () => {
@@ -102,11 +102,11 @@ describe(  "String$", () => {
     let s1 = in$.from('hello').cut()
     let s2 = in$.from('world')
     it("1",
-        () => expect(s1.typeof('function')) .toEqual(false)  )
+        () => expect(s1.typeof('function').logic) .toEqual(false)  )
     it("2",
-        () => expect(s1.if(v => v.typeof('string')).then('ok').result).toEqual('ok')  )
+        () => expect(s1.typeof('string').then('ok').result).toEqual('ok')  )
     it("3",
-        () => expect(s1.if(v => v.is('hello')).then(() => 3).result)  .toEqual(3)  )
+        () => expect(s1.if('hello').then(() => 3).result)  .toEqual(3)  )
     it("4",
         () => expect(s1.path('home', 'client').value).toEqual('hello/home/client')  )
     it("5",
