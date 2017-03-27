@@ -22,7 +22,7 @@ let object     = new WeakMap()
 let property   = new Map() // getter, setter
 let descriptor = new Map() // descriptor, value
 let heap      = new Map()
-let vars       = new Map()
+let vars      = new Map()
 
 const is = (x, y) => {
     if ( Object.is(x, y) ) return true
@@ -280,11 +280,10 @@ const __copy = v =>
     __.isObject(v)      ? Object.assign({}, v) : v
 
 const value = v => // && 'object' === typeof v.$
-    'object' === typeof v && Object.getOwnPropertyNames(v).includes('value') ?
+    'object' === typeof v && v.value ?
         v.value : v
 
 const __init = (self, ...args) => {
-    // console.log(args, args[0])
     let arg = args.length > 0 ? args[0] : {}
     let type = args[1]
     // console.log(arg, type, isTypeof(arg, type, 'function', Function, Function$))
@@ -500,12 +499,12 @@ class Bin$ extends Object {
             v.type === 'code' ? eval(v.value) :
             v.type === 'cash_property_name' ? this.$[v.value] : v
         )}
-    openChain (f, ...args) {
+    tap (f, ...args) {
         f(this.value, ...this.argument(...args))
         return this  }
     // chain (f, ...args)  { return this.take( f(this.value, ...this.argument(...args)) ) }
     chain (...f)  { return this.take( f.reduce( (a,v) =>
-        Array.isArray(v) ? v[0](a, ...v.slice(1)) : v(a) , this.value ) ) }
+        Array.isArray(v) ? v[0](a, ...v.slice(1)) : v(a), this.value ) ) }
     // __unchain (v) { return this.loose(v) }
     loose (v) { return this.cut(v) }
     cut (v) { //  change to loose
@@ -549,6 +548,11 @@ class Bin$ extends Object {
         return (value = object.get(this)) ? value.valueOf() : value  }
     // get __ ()        { return object.get(this)  }
 }
+
+let cashProp = (self, p, bin) => {
+    Object.defineProperty(self, p, { value: {}, enumberable: false })
+    return self[p].bin = new Object$(self[p], bin) }
+
 
 
 class Object$ extends Object {
@@ -821,10 +825,6 @@ class Xml extends Bin$ {
     removeEvery (p) {
         return this.findEvery( p, (v, w) => w.delete(p) )  }  }
 
-let cashProp = (self, p, bin) => {
-    Object.defineProperty(self, p, { value: {}, enumberable: false })
-    return self[p].bin = new Object$(self[p], bin) }
-
 class Array$ extends Array {
     constructor (arg, bin) {
         super()
@@ -900,63 +900,6 @@ class Array$ extends Array {
     get value ()  { return Array.from(this) }
     get result () { return result.get(this) }
     get logic ()  { return logic.get(this)  }  }
-
-    //
-    // is (a, ...fn) {
-    //     return __is(  is(this.value, a.valueOf() ), this, ...fn ) }
-    // typeof (type, ...fn) {
-    //     return __typeof(this, type, ...fn) }
-    // if   (f)    { return __if  (this, f)   }
-    // then (f)    { return __then(this, f)   }
-    // else (f)    { return __else(this, f)   }
-    // else_if (f) { return __else_if(this, f) }
-    // openCarry (f, ...v)   { return __run(this, f, ...v) }
-    // prop (...p) { return __prop(this, ...p) }    // ... is to tell between prop('p', undefined) or prop('p')
-    // propSetIf (p, v, f) {
-    //     (__.isFunction(f) ? f(this.prop(p)) : this.prop(p) === f) &&
-    //         this.prop(p, v)
-    //     return this  }
-    // propOrValue (p, v, f) {
-    //     f = f || (v => undefined !== v)
-    //     let prop = this.prop(p)
-    //     return f(prop) ? prop : v  }
-    // valueOrProp (v, p, f) {
-    //     f = f || (v => undefined !== v)
-    //     return f(v) ? v : this.prop(p)  }
-    // log (...f)  { return __log(this, ...f)  }
-    // find$ (f) {
-    //     return from( this.find(f) )  }
-    // push$ (...arg) {
-    //     this.push(...arg)
-    //     return this  }
-    // pop$ () {
-    //     this.pop()
-    //     return this  }
-    // shift$ (...v) {
-    //     'undefined' !== typeof v && this.push(...v)
-    //     this.shift()
-    //     return this  }
-    // unshift$ (...v) {
-    //     this.unshift(...v)
-    //     return this  }
-    // map    (...args) { return Array$(object.get(this).map    (...args)) }
-    // forEach(...args) { return Array$(object.get(this).forEach(...args)) }
-    // filter (...args) { return Array$(object.get(this).filter (...args)) }
-
-    // concat (...args) { return Array$(object.get(this).concat (...args)) }
-    // slice  (...args) { return Array$(object.get(this).slice  (...args)) }
-    // splice (...args) { return Array$(object.get(this).splice (...args)) }
-    // xmap (b, f) { f(v, w, i, a) }
-    // __coMap (b, f) {
-    //     return this.reduce((a, v, i) => {
-    //     a[i] = f(v, b[i], i, this)
-    //     return a }, new Array$()  )  }
-    // insert (i, ...v) {              // if v is array?
-    //     this.splice(i, 0, ...v)
-    //     return this }
-    // delete (i, n, ...v) {
-    //     this.splice(i, n, ...v)
-    //     return this }
 
 const __htmlTag = (self, tag, attr, ...a) =>
     self.append([HTML[tag](  attr, ...a.map(  v =>
@@ -1038,7 +981,15 @@ class Function$ extends Function {
             type: 'function'
           , bin:   bin
           , value: value(v)  })  }
+    bind (...v)   { return this.$.value.bind(...v) }
+    call (...v)   { return this.$.value.call(...v) }
+    execute (...v) {
+        this.$.value(...v)
+        return this  }
     invoke (...v) { return this.$.value(...v) }
+    get legnth () { return this.$.value.length }
+    get name ()   { return this.$.value.name }
+    toString ()   { return this.$.value.toString() }
     get value ()  { return this.$.value  }
 }
 
@@ -1081,8 +1032,9 @@ class Primitive {
     constructor (v, bin) {
         cashProp(this, '$', bin).reactives({
             type: 'primitive'
-          , value: v
+          , value: value(v)
           , bin:   bin  })  }
+    valueOf()    { return this.$.value }
     get value () { return this.$.value }
 }
 
@@ -1180,7 +1132,7 @@ if (prop) {
 }
 
 
-let exported = {
+let exported = Object.assign(from, {
     from:      from
   , code:      code
   , Bin$:      Bin$
@@ -1213,7 +1165,7 @@ let exported = {
   // , IncredifyProperty: augument
   // , fileFrom('hello')
   // return function and property. Is there ES6 way?
-}
+})
 
 
 let meteor = {}
