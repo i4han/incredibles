@@ -2,44 +2,45 @@
 let in$ = require('../src/incredibles.js')
 
 describe(  "Bin$", () => {
-    let a = in$.from({a:1, b:3, c:3, d:4})
-    let b = in$.from({})
-    let c = in$.from({a: o => o.name})
-    let d = in$.from({a:{b: v => v.name}})
+    let a = in$({a:1, b:3, c:3, d:4})
+    let b = in$({})
+    let c = in$({a: o => o.name})
+    let d = in$({a:{b: v => v.name}})
     it("in$.from",
-        () => expect(in$.from({a: 1}).value) .toEqual({a:1})  )
+        () => expect(in$.from({a: 1}).value).toEqual({a:1})  )
     it("set",
-        () => expect(b.set('a', 4).value)    .toEqual({a:4})  )
+        () => expect(b.set('a', 4).value)   .toEqual({a:4})  )
     it("is",
-        () => expect(b.if({a: 4}).logic)         .toEqual(true)  )
-    it("dset",
+        () => expect(b.if({a: 4}).logic)    .toEqual(true)  )
+    it("setAt",
         () => expect(b.setAt('b.c', 3).value).toEqual({a:4,b:{c:3}})  )
     it("delete",
         () => expect(b.delete('b').value)    .toEqual({a:4})  )
     it("setAt",
-        () => expect(b.setAt(0, 'a.b', 4, 'c', 'd.e.2', 'hello').at(0, 'a.b.4.c', 'd.e.2')).toEqual('hello'))
+        () => expect(b.setAt(0, 'a.b', 4, 'c', 'd.e.2', 'hello')
+                         .at(0, 'a.b', 4, 'c', 'd.e.2')).toEqual('hello'))
     it("clear",
         () => expect(b.clear().value)      .toEqual({})  )
     it("set",
         () => expect(b.set('a', 4).value)  .toEqual({a:4})  )
     it("prop to set",
-        () => expect(b.prop(0, 6).value)   .toEqual({a:4})  )
+        () => expect(b.$.setAt('a', 6).value).toEqual({a:4})  )
     it("prop to get",
-        () => expect(b.prop(0))            .toEqual(6)  )
+        () => expect(b.$.a)               .toEqual(6)  )
     it("rekey",
         () => expect(b.rekey('a', 'c').value).toEqual({c:4})  )
     it("set",
         () => expect(b.assign({b:6},{d:5}).value).toEqual({c:4, b:6, d:5})  )
     it("delete",
-        () => expect(b.delete('d').value)  .toEqual({c:4, b:6})  )
+        () => expect(b.delete('d').value).toEqual({c:4, b:6})  )
     it("keys",
-        () => expect(b.keys())             .toEqual(['c','b'])  )
+        () => expect(b.keys())           .toEqual(['c','b'])  )
     it("__",
-        () => expect(b.value)              .toEqual({c:4, b:6})  )
+        () => expect(b.value)            .toEqual({c:4, b:6})  )
     it("save and delete",
-        () => expect(b.cash.saveValuePropertyTo('c').delete('c').value).toEqual({b:6})  )
+        () => expect(b.save('c').delete('c').value).toEqual({b:6})  )
     it("restore",
-        () => expect(b.cash.restoreValuePropertyFrom('c').value)       .toEqual({c:4, b:6})  )
+        () => expect(b.restore('c').value)       .toEqual({c:4, b:6})  )
     it("is",
         () => expect(b.if({c:4, b:6}).logic)     .toEqual(true)  )
     it("is with true callback",
@@ -57,8 +58,8 @@ describe(  "Bin$", () => {
 })
 
 describe(  "Array$", () => {
-    let a = in$.from([1,2,3,4,5])
-    let b = in$.from([4,5,6,7,8])
+    let a = in$([1,2,3,4,5])
+    let b = in$([4,5,6,7,8])
     it("is",
         () => expect(a.if([1,2,3,4,5]).logic).toEqual(true) )
     it("typeof",
@@ -99,35 +100,35 @@ let path = require('path')
 
 describe(  "String$", () => {
     in$.method('path', path.join)
-    let s1 = in$.from('hello').cut()
-    let s2 = in$.from('world')
-    it("1",
+    let s1 = in$('hello').cut()
+    let s2 = in$('world')
+    it("typeof logic",
         () => expect(s1.typeof('function').logic) .toEqual(false)  )
-    it("2",
+    it("typeof result",
         () => expect(s1.typeof('string').then('ok').result).toEqual('ok')  )
-    it("3",
-        () => expect(s1.if('hello').then(() => 3).result)  .toEqual(3)  )
-    it("4",
-        () => expect(s1.path('home', 'client').value).toEqual('hello/home/client')  )
-    it("5",
+    it("if then",
+        () => expect(s1.if('hello').then(() => 3)  .result).toEqual(3)  )
+    it("path",
+        () => expect(s1.path('home',   'client').value).toEqual('hello/home/client')  )
+    it("path",
         () => expect(s1.path(s2.value, 'client').value).toEqual('hello/world/client')  )
-    it("6",
-        () => expect(s1.value)                       .toEqual('hello')  )
-    it("7",
-        () => expect(s1.if(v => in$.is(v.value, 'hello')).then( w => w.value + 'o' ).result).toEqual('helloo')  )
-    it("8",
-        () => expect(s1.if(v => in$.is(v.value, 'hell' )).else( x => x.value + 'p' ).result).toEqual('hellop')  )
-    it("10",
-        () => expect(in$.from('hello-world').camelize().value) .toEqual('helloWorld') )
-    it("11",
-        () => expect(in$.from('helloWorld') .dasherize().value).toEqual('hello-world') )
+    it("value",
+        () => expect(s1.value)                         .toEqual('hello')  )
+    it("if true",
+        () => expect(s1.if('hello').then( w=>w.value + 'o' ).result).toEqual('helloo')  )
+    it("if false",
+        () => expect(s1.if('hellx').else( x=>x.value + 'p' ).result).toEqual('hellop')  )
+    it("camelize",
+        () => expect(in$('hello-world').camelize().value) .toEqual('helloWorld') )
+    it("dasherize",
+        () => expect(in$('helloWorld') .dasherize().value).toEqual('hello-world') )
 
 })
 
 describe(  "String", () => {
-    it("1",
+    it("padStart",
         () => expect('halo'.padStart(5)).toEqual(' halo')  )
-    it("2",
+    it("padEnd",
         () => expect('halo'.padEnd(5))  .toEqual('halo ')  )
 
 })

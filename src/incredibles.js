@@ -18,11 +18,11 @@ const TYPES = ['object', 'array', 'string', 'function', 'date', 'code']
 
 let logic  = new WeakMap()
 let result = new WeakMap()
-let object     = new WeakMap()
-let property   = new Map() // getter, setter
+let object   = new WeakMap()
+let property = new Map() // getter, setter
+let heap     = new Map()
+let vars     = new Map()
 let descriptor = new Map() // descriptor, value
-let heap      = new Map()
-let vars      = new Map()
 
 const is = (x, y) => {
     if ( Object.is(x, y) ) return true
@@ -33,41 +33,32 @@ const is = (x, y) => {
         if ( ! is(x[p], y[p]) ) return false
     return true  }
 
-const __func  = (fn, o) => __.isFunction(fn) ? result.set(o, fn(o)) : result.set(o, fn)
+const value = v => // && 'object' === typeof v.$
+    'object' === typeof v && v.value ?
+        v.value : v
 
-const __is = (answer, o, ...fn) =>
-    fn.length === 0 ? answer ? true     : false :
-    fn.length === 1 ? answer ? fn[0](o) : false :
-    fn.length === 2 ? answer ? fn[0](o) : fn[1](o)
-                    : console.log('error: is')
+const copy = v =>
+    v instanceof Array$ ? new Array$(v.value)  :
+    Array.isArray(v)    ? Object.assign([], v) :
+    __.isObject(v)      ? Object.assign({}, v) : v
 
 const __type = (self, type) => {
-    result.set(self, self.type)
-    logic.set(self, self.type === type)
+    result.set(self, self.$.type)
+    logic.set(self, self.$.type === type)
     return self  }
 
-const __checkProp = (self, o) => {
-    // console.log(0, Object.keys(o).map(k => self[k] === o[k]).every(v=>v))
-    return Object.keys(o).map(k => self[k] === o[k]).every(v=>v) }
 
-const __if = (self, f) => {
-    logic.set(    self, __.isFunction(f) ? !!f(self) : is(self.value, f) )
-    return self  }
+const __func  = (fn, o) => __.isFunction(fn) ? result.set(o, fn(o)) : result.set(o, fn)
 
-const __else_if = (self, f) => {
-    if (logic.get(self) === false)
-        logic.set(self, __.isFunction(f) ? !!f(self) : is(self.value, f) )
-    return self  }
+// const __is = (answer, o, ...fn) =>
+//     fn.length === 0 ? answer ? true     : false :
+//     fn.length === 1 ? answer ? fn[0](o) : false :
+//     fn.length === 2 ? answer ? fn[0](o) : fn[1](o)
+//                     : console.log('error: is')
 
-const __then = (self, f) => {
-    if (logic.get(self) === true )
-        __.isFunction(f) ? __func(f, self) : result.set(self, f)
-    return self  }
-
-const __else = (self, f) => {
-    if (logic.get(self) === false)
-        __.isFunction(f) ? __func(f, self) : result.set(self, f)
-    return self  }
+// const __checkProp = (self, o) => {
+//     // console.log(0, Object.keys(o).map(k => self[k] === o[k]).every(v=>v))
+//     return Object.keys(o).map(k => self[k] === o[k]).every(v=>v) }
 
 const __carry = (self, f, ...v) => {
     if (! __.isFunction(f)) return f
@@ -101,15 +92,6 @@ const __prop = (self, ...args) => { // property { writable: true watch: f(k, ova
     if (args.length === 1) return self.$[p]
     if (args.length === 2) self.cash.set(p, args[1])
     return self  }
-
-const __propWatch = (self, p, w) => {
-    property.get(self)[p].watch = w
-    return self  }
-
-const __propWritable = (self, p, w) => {
-    property.get(self)[p].writable = w
-    return self  }
-
 
 const __assign = (self, ...prop) => {
     prop.forEach( p => {
@@ -165,11 +147,6 @@ const __at = (...args) => {
     if ( __.isObject(args[0]) ) return __at(args[0][args[1]], ...args.slice(2))
     else return args[0]  }
 
-// Function.prototype.typeof = (type, ...fn) => __typeof('function', type, this, ...fn)
-// Function.prototype.is = (f, ...fn) => __is(f.toString === this.toString, this, fn)
-// String.prototype.into$ = function() { return new String$(this) }
-
-
 
 class WeakMap$ extends WeakMap {
     constructor (arg) {
@@ -192,7 +169,7 @@ let bind = new Map$()
  * @return {Array$} keys of the Object$
  */
 
-class CashProperty {
+class __CashProperty {
     constructor (self) {
         this.self = self
         vars.set(this, {keys:[]})
@@ -225,8 +202,6 @@ class CashProperty {
     get vars ()  { return vars.get(this) }
     get value () { return object.get(this) }
     get descriptor ()  { return descriptor.get(this) }
-    assign (o) {}
-    assignDefaults (o) {}
     set (p, v) {
         if (this.has(p)) this.prop[p] = v
         else {
@@ -247,14 +222,6 @@ class CashProperty {
     has (p)   { return this.vars.keys.includes(p) }
     keys ()   { return this.vars.keys }
     values () { return this.vars.keys.map(v => this.prop[v]) }
-    watch (p) {}
-    freeze () {}
-    isFrozen () {}
-    // this.savedProperties = []
-    push (p, v) {}
-    pop (p) {}
-    shift (p) {}
-    unshift (p, v) {}
     saveValueTo (p) { return this.set(p, this.self.value) }
     restoreValueFrom (p) {
         object.set(this.self, this.get(p))
@@ -274,117 +241,157 @@ class CashProperty {
         this.descriptor[p][e] = f
         return this.self  }  }
 
-const __copy = v =>
-    v instanceof Array$ ? new Array$(v.value)  :
-    Array.isArray(v)    ? Object.assign([], v) :
-    __.isObject(v)      ? Object.assign({}, v) : v
-
-const value = v => // && 'object' === typeof v.$
-    'object' === typeof v && v.value ?
-        v.value : v
-
-const __init = (self, ...args) => {
+const init = (self, ...args) => {
     let arg = args.length > 0 ? args[0] : {}
     let type = args[1]
     // console.log(arg, type, isTypeof(arg, type, 'function', Function, Function$))
     if ( self.unchained )
-        return from(__copy(arg), type)
+        return from(copy(arg), type)
     arg = value(arg)
     if ( undefined === arg || 'boolean' === typeof arg ||
         null === arg || Object.is(NaN, arg) ) {
+        self.$.type = 'primitive'
         self.primitive = new Primitive(arg, self)
         object.set(self, self.primitive)  }
     else if ( isTypeof(arg, 'array', type) ) {
-        self.type = 'array'
-        if (arg instanceof Array$)
-            self.array = arg
-        else
-            self.array = new Array$(arg, self)
+        self.$.type = 'array'
+        self.$.source = arg
+        self.array = arg instanceof Array$ ? arg : new Array$(arg, self)
         object.set(self, arg)  } // self.array?
     else if ( isTypeof(arg, 'string',   type ) ) {
-        self.type = 'string'
+        self.$.type = 'string'
         self.string   = new String$(arg, self)
         object.set(self, self.string)  }
     else if ( isTypeof(arg, 'number',   type ) ) {
-        self.type = 'number'
+        self.$.type = 'number'
         self.number   = new Number$(arg, self)
         object.set(self, self.number)  }
     else if ( isTypeof(arg, 'function', type ) ) {
-        self.type = 'function'
+        self.$.type = 'function'
         self.function = new Function$(arg, self)
         object.set(self, self.function)  }
     else if ( 'code' === type ) {
-        self.type = 'code'
+        self.$.type = 'code'
         object.set(self, arg) }
     else {
-        self.type = (undefined !== type) ? type : 'object'
+        self.$.type = (undefined !== type) ? type : 'object'
         object.set(self, arg) }
     return self  }
+
+let cashProp = (self, p) => {
+    Object.defineProperty(self, p, { value: {}, enumberable: false })
+    self[p].prop = new Object$(self[p], self, 'cash')
+    self[p].setAt = function (p, v) {
+        this.prop.setAt(p, v)
+        return this.prop.$.bin  }
+    return self[p].prop}
+
+const setTo = (self, v, prop) => {
+    if (v.length === 1 && 'string' === typeof v[0])
+        global[v[0]]  = self[prop] // length === 1 not string to be error
+    else if (v.length === 2)
+        v[0][v[1]] = self[prop]
+    return self  }
+
+const fnValue = (self, f) =>
+    'function' === typeof f ? f(self.value) : f
 
 class Bin$ extends Object {
     constructor (arg, type) {
         super()
-        __init(this, arg, type)
-        this.cash = new CashProperty(this)  }
-        // property.set(this, {}) Yes. arg can be an array.
-        // type, unchained, freeze, writable
-        // result, logic,
-        // error
-    take (arg, type) { return __init(this, arg, type) }
-    get $ () { return this.cash.prop }
-    __is (obj, ...fn) {
-        return __is( is(this.value, obj), this.value, ...fn)  }
-    typeof(type) { return __type(this, type) }
-    if (f)      { return __if(this, f)   }
-    then (f)    { return __then(this, f) }
-    else (f)    { return __else(this, f) }
-    else_if (f) { return __else_if(this, f) }
+        cashProp(this, '$')
+        .reactive('bin',    undefined)  // type, unchained, freeze, writable
+        .reactive('type',   undefined) // result, logic, error
+        .reactive('source', undefined)
+        .reactive('store',  {} )
+        init(this, arg, type)  }
+        // this.cash = new CashProperty(this)  }
+    // get $ () { return this.cash.prop }
+    from (arg, type) { return init(this, arg, type)    }
+    to (...v)        { return setTo(this, v, 'value')  }
+    logicTo (...v)   { return setTo(this, v, 'logic')  } // if
+    resultTo (...v)  { return setTo(this, v, 'result') } // switch
+
+    typeof(v) { return __type(this, v) }
+    if (f)      {
+        logic.set( this, __.isFunction(f) ?
+            !!f(this) : is(this.value, f) )
+        return this  }
+    then (f)    {
+        if (logic.get(this) === true)
+            __.isFunction(f) ?
+                __func(f, this) : result.set(this, f)
+        return this  }
+    else (f)    {
+        if (logic.get(this) === false)
+            __.isFunction(f) ?
+                __func(f, this) : result.set(this, f)
+        return this  }
+    else_if (f) {
+        if (logic.get(this) === false)
+            logic.set(this, __.isFunction(f) ?
+                !!f(this) : is(this.value, f) )
+        return this }
+    switch (f)  { // setResult
+        return this.void( result.set(this, fnValue(this, f)) )  }
+    case (f)    {
+        logic.set(this,
+            __.isFunction(f) ?
+                !!f(this.result) :
+                is(this.result, f) )
+        return this  }
+
     carry (f, ...v)     { return __carry(this, f, ...v) }
     openCarry (f, ...v) { return __run(this, f, ...v)   }
+
     log (...f)  { return __log(this, ...f)  }
-    prop (...p) { return __prop(this, ...p) }
-    error (code, v) {
-        console.log(code, v)
-        return this }
-    // backupPropTo (...p)  {
-    //     p.forEach(  v =>
-    //         __prop(this, '@prop:' + v, this.at(v) )  )
-    //     return this  }
-    // restorePropFrom (...p) {
-    //     p.forEach(  v =>
-    //         this.setAt( v, __prop(this, '@prop:' + v) )  )
-    //     return this  }
-    // removeProp (...p)  {
-    //     p.forEach(  v =>
-    //         this.backupPropTo(v).delete(v)  )
-    //     return this  }
-    // restoreAll () { return this.restore( ...this.keys() ) }
-    // removeAll ()  { return this.removeProp ( ...this.keys() ) }
+    void ()     { return this }
+    // prop (...p) { return __prop(this, ...p) }
+    // setProp (p, v) { return this.void( this.$[p] = v ) }
+    error (p, ...v) {
+        console.log(p, ...v)
+        return this  }
+
+    chain (...f)  { return this.from( f.reduce( (a,v) =>
+        Array.isArray(v) ? v[0](a, ...v.slice(1)) : v(a), this.value ) ) }
+    thru (f, ...args) { return this.from( f(this.value, ...args) )   }
+    over (f, ...args) { return f( this, ...args ) }
+    tap  (f, ...args) { return this.void( f( this.value, ...args ) ) }
+    cut (v) { //  change to loose
+        if (v === undefined)
+             this.unchained = true
+        else this.unchained = v
+        return this  }
+
     delete (...keys) {
         if ( keys.length > 1 ) keys.map( v => delete this.value[v] )
         else delete this.value[ keys[0] ]
         return this  }
+    remove (k)  { return this.save(k).delete(k) }
+    restore (k) { return this.setAt( k, this.$.store[k] ) }
+    save (k) {
+        this.$.store[k] = this.at(k)
+        return this  }
+
     add (...o) {
         return __add(this, ...o)  }
+
     set (key, value) {
-        return this.void( this.value[key] = value )  }
+        if (this.$.type === 'array')
+            this.array.set(key, value)
+        else this.value[key] = value
+        return this  }
     setAt (...args) {
+        if (args.length < 2) this.error('setAt', ...args)
         let value = args[ args.length - 1 ]
         let k = args.slice(0, args.length - 1).join('.').split('.')
-        if (args.length === 0) console.log('error: setAt args null')
-        if (args.length === 1)
-            k[0] = value
         if (k.length === 1)
             return this.set(k[0], value)
-        let o0 = this.get(k[0])
-        o0 = this.set(k[0], o0 ||
-            (Number(k[1]).toString() === k[1] ? [] : {}) ).get(k[0])
-        let wo0 = new Bin$(o0)
-        k.length === 2 ?
-            __set (o0, k[1], value) : wo0.setAt(...k.slice(1), value)
+        else
+            this.setDefault(k[0], Number(k[1]).toString() === k[1] ? [] : {} )
+            .wrapAt(k[0])
+            .setAt(...k.slice(1), value)
         return this  }
-    // __dset (...v) { return this.setAt(...v) }
-    // oset (...obj) { return this.assign (...obj) }
     assign (...obj) {  // assign this.add is recursive, assign is not
         __assign(this, obj[0])  // recursive obj reference assign
         return obj.length > 1 ? this.assign( ...obj.slice(1) ) : this  }
@@ -392,41 +399,24 @@ class Bin$ extends Object {
         key.forEach( (v, i) => this.set( v, value[i] ) )
         return this  }
     // setEntries ([[key, value]]) {}
-    setIf (key, value, f) {
+    setWhen (key, value, f) { // ...f => f[0](...f.slice(1)) <- arg
         (__.isFunction(f) ? f(this.at(key)) : this.at(key) === f) &&
             this.setAt(key, value)
         return this  }
-    setDefault (key, value) { return this.setIf(key, value) }
-    __setValue (...v) { return this.put(...v) }
-    put (...args) {   // <-> take
-        if (args.length === 1 && 'string' === typeof args[0])
-            global[args[0]]  = this.value // length === 1 not string to be error
-        else if (args.length === 2)
-            args[0][args[1]] = this.value
-        return this  }
-    // take, put -> from, to, resultTo, logicTo
-    // from('a') resultFrom('a'), logicFrom('a')
-    setResult (v) { return this.void( result.set(this, v) ) }
-    void () { return this }
+    setDefault (key, value) { return this.setWhen(key, value) }
+
+    // setResult (v) { return this.void( result.set(this, v) ) }
     get (...key) {
         // key.length > 3 & console.log(0, object.get(this))
         let k = this.value[ key[0] ]
         return key.length > 1 ? __get(k, ...key.slice(1)) : k  }
-
-    // __get$ (...key) {    // for object
-    //     return from( this.get(...key) )  }
-    // __dget$ (...key) {
-    //     return from( this.at(...key) )  }
-    // put, take
     at (...key) {
         return this.get( ...key.join('.').split('.') )  }
-    pick (...key) {
-        return this.take( this.at(...key) ) }
-    __reset (v) {
-        return this.take(v) }
-    // __dget (...key) { return this.at(...key) }
+    pickAt (...key) { return this.from( this.at(...key) ) }
+    wrapAt (...key) { return  new Bin$( this.at(...key) ) }
+
     size ()  { return this.keys().length }
-    clear () { return this.void( object.set(this, {}) ) }
+    clear () { return this.void( this.value = {} ) } // to do: clear not assign new
     has (k)      { return k in this.value  }
     includes (v) { return this.values().includes(v) }
     forEach (f) {
@@ -475,10 +465,10 @@ class Bin$ extends Object {
         return __recursive(this, f)  }
     copy (o)  {
         if (this.typeof('string').logic)
-            return new Object$(this.value, this.type)
+            return new Object$(this.value, this.$.type)
         else {
             o = o || {}
-            return new Object$( Object.assign(o, this.value,   Object.assign({}, o)), this.type ) }  }
+            return new Object$( Object.assign(o, this.value,   Object.assign({}, o)), this.$.type ) }  }
     // paste (o) {
     //     let copied = this.cash.get('@clipboard')
     //     if ('string' === copied.type)
@@ -493,28 +483,6 @@ class Bin$ extends Object {
             __.isObject(v)   ? __invokeProperties(v, self) : v  ))
         return this  }
     // valueOf ()       { return this.__  }
-    argument (...args) {
-        return args.map(v =>
-            !v ? v : // undefined, null, false, 0, '', NaN
-            v.type === 'code' ? eval(v.value) :
-            v.type === 'cash_property_name' ? this.$[v.value] : v
-        )}
-    tap (f, ...args) {
-        f(this.value, ...this.argument(...args))
-        return this  }
-    // chain (f, ...args)  { return this.take( f(this.value, ...this.argument(...args)) ) }
-    chain (...f)  { return this.take( f.reduce( (a,v) =>
-        Array.isArray(v) ? v[0](a, ...v.slice(1)) : v(a), this.value ) ) }
-    // __unchain (v) { return this.loose(v) }
-    loose (v) { return this.cut(v) }
-    cut (v) { //  change to loose
-        if (v === undefined)
-            this.unchained = true
-        else this.unchained = v
-        return this  }
-    __invoke$ (f) {
-        result.set(this, from( this.invoke(f) ))
-        return this  }
     pop (p) {
         if (0 === this.size()) return undefined // not found undefined
         if (undefined !== p) {
@@ -522,46 +490,51 @@ class Bin$ extends Object {
             this.delete(p)
             return new Object({[p]: v}) }
         else {
-            p = this.lastKey
+            p = this.last
             let v = this.get(p)
             this.delete(p)
             return new Object$({[p]: v}) }  }
-    pop$ () {
-        result.set(this, this.pop())
-        return this  }
+    // pop$ () {
+    //     result.set(this, this.pop())
+    //     return this  }
     shift () {
         if (0 === this.size()) return undefined
-        let p = this.lastKey
+        let p = this.last
         let v = this.get(p)
         this.delete(p)
         return new Object$({[p]: v})  }
-    shift$ () {
-        result.set(this, this.shift())
-        return this  }
-
-    get firstKey ()  { return this.keys()[0] }
-    get lastKey ()   { return this.keys()[ this.size() - 1 ] }
-    get result ()    { return result.get(this)  }
-    get logic () { return logic.get(this)  }
-    get value ()     {
+    // shift$ () {
+    //     result.set(this, this.shift())
+    //     return this  }
+    get first ()  { return this.keys()[0] }
+    get last ()   { return this.keys()[ this.size() - 1 ] }
+    get result () { return result.get(this)  }
+    get logic ()  { return logic.get(this)  }
+    get value ()  {
+        if ('array' === this.$.type)
+            return this.array.value
         let value // return value if 6 non value: false, null, NaN, undefined, '', 0
         return (value = object.get(this)) ? value.valueOf() : value  }
     // get __ ()        { return object.get(this)  }
 }
 
-let cashProp = (self, p, bin) => {
-    Object.defineProperty(self, p, { value: {}, enumberable: false })
-    return self[p].bin = new Object$(self[p], bin) }
-
 
 
 class Object$ extends Object {
-    constructor (arg, type) {
+    constructor (arg, bin, cash) {
         super()
+        if (cash)
+            this.$ = {bin: bin}
+        else
+            cashProp(this, '$')
+            .reactive('bin',    bin )
+            .reactive('source', value )
+            .reactive('store', {} )
+            .reactive('type',  'object')
+            .on('set', 'type', (function (v, ov, self) { TYPES.includes(v) ? v : this.error(ov) }).bind(this) )
         object.set(this, arg)
         descriptor.set(this, {})
-        heap.set(this, {})
-    }
+        heap.set(this, {})  }
     reactive (p, v, o) {
         let descObj = descriptor.get(this)  // bindTo onGet, onSet, onError
         let val  = heap.get(this)           // debug, UnneededAssigm
@@ -593,29 +566,32 @@ class Object$ extends Object {
         return this.self  }
     bindTo (p, o, prop) {
         this.descriptor(p).bindTo.push([o, prop]) }
+
     delete (...keys) {
         if ( keys.length > 1 ) keys.map( v => delete this.value[v] )
         else delete this.value[ keys[0] ]
         return this  }
+    remove (k)  { return this.save(k).delete(k) }
+    restore (k) { return this.set( k, this.$.store[k] ) }
+    save (k) {
+        this.$.store[k] = this.get(k)
+        return this  }
     add (...o) {
         return __add(this, ...o)  }
+
     set (key, value) {
         this.value[key] = value
         return this  }
     setAt (...args) {
+        if (args.length < 2) this.error('setAt', ...args)
         let value = args[ args.length - 1 ]
         let k = args.slice(0, args.length - 1).join('.').split('.')
-        if (args.length === 0) console.log('error: setAt args null')
-        if (args.length === 1)
-            k[0] = value
         if (k.length === 1)
             return this.set(k[0], value)
-        let o0 = this.get(k[0])
-        o0 = this.set(k[0], o0 ||
-            (Number(k[1]).toString() === k[1] ? [] : {}) ).get(k[0])
-        let wo0 = new Bin$(o0)
-        k.length === 2 ?
-            __set (o0, k[1], value) : wo0.setAt(...k.slice(1), value)
+        else
+            this.setDefault(k[0], Number(k[1]).toString() === k[1] ? [] : {} )
+            .wrapAt(k[0])
+            .setAt(...k.slice(1), value)
         return this  }
     assign (...obj) {  // add?
         __assign(this, obj[0])  // recursive obj reference assign
@@ -623,38 +599,34 @@ class Object$ extends Object {
     zip (key, value) { //   aset(['a', 'b', 'c'], [1,2,3])
         key.forEach( (v, i) => this.set( v, value[i] ) )
         return this  }
-    setIf (key, value, f) {
+    setWhen (key, value, f) {
         (__.isFunction(f) ? f(this.at(key)) : this.at(key) === f) &&
             this.setAt(key, value)
         return this  }
-    setDefault (key, value) { return this.setIf(key, value) }
+    setDefault (key, value) { return this.setWhen(key, value) }
     put (...args) {   // <-> take
         if (args.length === 1 && 'string' === typeof args[0])
             global[args[0]]  = this.value // length === 1 not string to be error
         else if (args.length === 2)
             args[0][args[1]] = this.value
         return this  }
-    __setValue (...v) { return this.put(...v) }
-    setResult (v) {
-        result.set(this, v)
-        return this  }
     get (...key) {
         let k = this.value[ key[0] ]
         return key.length > 1 ? __get(k, ...key.slice(1)) : k  }
     at (...key) {
         return this.get( ...key.join('.').split('.') )  }
-    pick (...key) {
-        return this.take( this.at(...key) ) }
+    pickAt (...key) { return this.from( this.at(...key) ) }
+    wrapAt (...key) { return new Object$( this.at(...key) ) }
     size () { return this.keys().length }
     clear () {
         object.set(this, {})
         return this  }
     has (k) { return k in this.value  }
     includes (v) { return this.entries().includes(v) }
-    keys ()      { return Object.keys( this.value ) }
-    values ()    { return this.keys().map( k => this.get(k) ) }
-    entries ()   { return Object.entries(this.value) }
-    valueOf ()   { return this.value }
+    keys ()     { return Object.keys( this.value ) }
+    values ()   { return this.keys().map( k => this.get(k) ) }
+    entries ()  { return Object.entries(this.value) }
+    valueOf ()  { return this.value }
     forEach (f) {
         this.keys().forEach( k => f( this.get(k), k, this ) )
         return this  }
@@ -689,10 +661,10 @@ class Object$ extends Object {
         return __recursive(this, f)  }
     copy (o)  {
         if (this.typeof('string').logic)
-            return new Object$(this.value, this.type)
+            return new Object$(this.value, this.$.type)
         else {
             o = o || {}
-            return new Object$( Object.assign(o, this.value,   Object.assign({}, o)), this.type ) }  }
+            return new Object$( Object.assign(o, this.value,   Object.assign({}, o)), this.$.type ) }  }
     // paste (o) {
     //     let copied = this.cash.get('@clipboard')
     //     if ('string' === copied.type)
@@ -713,28 +685,19 @@ class Object$ extends Object {
             this.delete(p)
             return new Object({[p]: v}) }
         else {
-            p = this.lastKey
+            p = this.last
             let v = this.get(p)
             this.delete(p)
             return new Object$({[p]: v}) }  }
-    pop$ () {
-        result.set(this, this.pop())
-        return this  }
     shift () {
         if (0 === this.size()) return undefined
-        let p = this.lastKey
+        let p = this.last
         let v = this.get(p)
         this.delete(p)
         return new Object$({[p]: v})  }
-    shift$ () {
-        result.set(this, this.shift())
-        return this  }
 
-    bindto (p, os, ps) {}
-    validate (p, f) {}
-
-    get firstKey () { return this.keys()[0] }
-    get lastKey ()  { return this.keys()[ this.size() - 1 ] }
+    get first () { return this.keys()[0] }
+    get last ()  { return this.keys()[ this.size() - 1 ] }
     get result () { return result.get(this) }
     get logic ()  { return logic.get(this)  }
     get value ()  {
@@ -756,7 +719,7 @@ const method = (name, func) =>
 class HtmlElement extends Bin$ { constructor (arg) { super(arg) } }
 ['appendChild', 'addEventListener'].forEach( v =>
     HtmlElement.prototype[v] = function (...x) {
-        return this.setResult( this.value[v](...x) )  })
+        return this.switch( this.value[v](...x) )  })
 
 const xmlObject = o => {
     let value = {}
@@ -769,6 +732,17 @@ const xmlObject = o => {
         else
             value[p] = [o[p].toString()] }
     return value  }
+
+const findRoot = (o, prop) => {
+    let keys = Object.keys(o)
+    if (keys.length === 1)
+        return keys[0] === prop ? o[keys[0]] : findRoot( o[keys[0]], prop )
+    else (keys.length === 2)
+        if (keys[0] === '$')
+            return keys[1] === prop ? o[keys[1]] : findRoot( o[keys[1]], prop )
+        else if (keys[1] === '$')
+            return keys[0] === prop ? o[keys[0]] : findRoot( o[keys[0]], prop )
+    return o  }
 
 class Xml extends Bin$ {
     constructor (arg) {
@@ -783,31 +757,12 @@ class Xml extends Bin$ {
                     return stepIn( o[keys[0]] )
             return o  }
         super(arg)
-        this.prop('@root', from( stepIn(this.value) ))
+        this.$.root = from( stepIn(this.value) )
     }
-    root (p) {
-        const findRoot = (o, prop) => {
-            let keys = Object.keys(o)
-            if (keys.length === 1)
-                return keys[0] === prop ? o[keys[0]] : findRoot( o[keys[0]], prop )
-            else (keys.length === 2)
-                if (keys[0] === '$')
-                    return keys[1] === prop ? o[keys[1]] : findRoot( o[keys[1]], prop )
-                else if (keys[1] === '$')
-                    return keys[0] === prop ? o[keys[0]] : findRoot( o[keys[0]], prop )
-            return o  }
-        let root = findRoot(this.value, p)[0]
-        this.prop('@root', from(root))
-        return this  }
-    insert (obj) {
-        this.prop('@root').assign( xmlObject(obj) )
-        return this  }
-    removeElement (p) {
-        this.prop('@root').cash.removeValuePropertyTo(p)
-        return this  }
-    restoreElement (p) {
-        this.prop('@root').cash.restoreValuePropertyFrom(p)
-        return this  }
+    root (p)     { return this.void( this.$.root = from( findRoot(this.value, p)[0] ) ) }
+    insert (obj) { return this.void( this.$.root.assign( xmlObject(obj) ) ) }
+    removeElement (p)  { return this.void( this.$.root.remove(p) )  }
+    restoreElement (p) { return this.void( this.$.root.restore(p) ) }
     findEvery (p, f) {
         const element = (o, prop) => {
             for (let i = 0; i < o.length; i++) {
@@ -818,18 +773,16 @@ class Xml extends Bin$ {
                             if ( ! __.isObject(o[i][q][r]) ) continue
                             f( from(o[i][q][r]), from(o[i]) )  }
                     else if (q !== '$') element( o[i][q], prop )  }  }
-        element([this.prop('@root').value], p)
+        element([this.$.root.value], p)
         return this  }
-    insertEvery (p, obj) {
-        return this.findEvery( p, v => v.assign(xmlObject( obj )) ) }
-    removeEvery (p) {
-        return this.findEvery( p, (v, w) => w.delete(p) )  }  }
+    insertEvery (p, obj) { return this.findEvery( p, v => v.assign(xmlObject( obj )) ) }
+    removeEvery (p)      { return this.findEvery( p, (v, w) => w.delete(p) )  }  }
 
 class Array$ extends Array {
     constructor (arg, bin) {
         super()
         let value = arg instanceof Array$ ? arg.value : arg || []
-        cashProp( this, '$', bin )
+        cashProp( this, '$')
         .reactive('bin',    bin )
         .reactive('source', value )
         .reactive('type',  'array')
@@ -845,8 +798,11 @@ class Array$ extends Array {
         v = undefined === v ? ' ' : v
         console.log( this.join(v) )
         return this }
-    get (i)    { return this[i]  }
-    set (i, v) { return this[i] = v  }
+    get (i)    { return this.$.source[i]  }
+    set (i, v) {
+        this[i] = v
+        this.$.source[i] = v
+        return this  }
     reload () {
         let origin = this.$.source
         this.length = 0
@@ -886,7 +842,7 @@ class Array$ extends Array {
             b = b.array
         if ( ! (b instanceof Array$) )
             b = new Array$(b)  // to check b is array
-        let ret = this.$.bin.unchained ? __copy(this) : this
+        let ret = this.$.bin.unchained ? copy(this) : this
         return ret.append(b.filter( (v,i) => this.findIndex( f(v, i) ) === -1 ) ) }
     sum (f) {
         f = f || (v => v)
@@ -896,8 +852,7 @@ class Array$ extends Array {
         return this.reduce(((a,v) => __.isNumber(f(v)) ? a += 1 : a), 0)  }
     average (f) {
         return this.sum(f) / this.count(f)  }
-    valueOf ()    { return Array.from(this) }
-    get value ()  { return Array.from(this) }
+    get value ()  { return this.sync().$.source }
     get result () { return result.get(this) }
     get logic ()  { return logic.get(this)  }  }
 
@@ -970,14 +925,14 @@ let blazeAttr = (_, obj) => {
 
 htmlTags.forEach(tag => Template.prototype[tag] = function(...arr) {
     return this.append([ 0 === arr.length ? HTML[tag]() : HTML[tag](...arr.into$
-        .reduce$( (a,v) => a.append(
+        .reduceFn( (a,v) => a.append(
             mustacheAttr(v, cube.lookupInView.bind(null, this.view), this.view) ),
             v=>__.isBlazeAttr(v[0]) ? [ blazeAttr(this.view, v.shift()) ].into$ : [].into$ ).value  )])  })
 
 class Function$ extends Function {
     constructor (v, bin) {
         super()
-        cashProp(this, '$', bin).reactives({
+        cashProp(this, '$').reactives({
             type: 'function'
           , bin:   bin
           , value: value(v)  })  }
@@ -998,7 +953,7 @@ class String$ extends String {
         // arg = arg instanceof Bin$ ||
         //       arg instanceof String$ ? arg.value : arg
         super(value(v))
-        cashProp(this, '$', bin).reactives({
+        cashProp(this, '$').reactives({
             type: 'string'
           , bin:   bin  })  }
     camelize ()  {
@@ -1012,7 +967,7 @@ class String$ extends String {
 class Number$ extends Number {
     constructor (v, bin) {
         super(value(v))
-        cashProp(this, '$', bin).reactives({
+        cashProp(this, '$').reactives({
             type: 'number'
           , bin:   bin  })  }
     get value () { return this.valueOf() }
@@ -1022,7 +977,7 @@ class Number$ extends Number {
 class Date$ extends Date {
     constructor (v, bin) {
         super(value(v))
-        cashProp(this, '$', bin).reactives({
+        cashProp(this, '$').reactives({
             type: 'date'
           , bin:   bin  })  }
     get value () { return this.valueOf() }
@@ -1030,7 +985,7 @@ class Date$ extends Date {
 
 class Primitive {
     constructor (v, bin) {
-        cashProp(this, '$', bin).reactives({
+        cashProp(this, '$').reactives({
             type: 'primitive'
           , value: value(v)
           , bin:   bin  })  }
@@ -1058,12 +1013,12 @@ let strip = v => {
 let code = str => new Bin$(str[0], 'code')
 // let range = (start, end, step) =>
 
-from({
-    array: ['length']
-})
-.forEach( (v,k)=>
-    v.forEach( w => Bin$.prototype[w] = function (...x) {
-        return this[k].value[w]  })  )
+// from({
+//     array: ['length']
+// })
+// .forEach( (v,k)=>
+//     v.forEach( w => Bin$.prototype[w] = function (...x) {
+//         return this[k].value[w]  })  )
 
 from({
     array:    ['sync', 'reload']
@@ -1078,8 +1033,7 @@ from({
 })
 .forEach( (v,k)=>
     v.forEach( w => Bin$.prototype[w] = function (...x) {
-        return this.setResult( this[k][w](...x) )  })  )
-
+        return this.switch( this[k][w](...x) )  })  )
 
 from({
     array:
@@ -1096,7 +1050,7 @@ from({
 })
 .forEach(  (v,k)=>
     v.forEach(  w => Bin$.prototype[w] = function (...x) {
-        return this.take( this[k][w](...x) )  })  )
+        return this.from( this[k][w](...x) )  })  )
 
 
 let prop = 'into$'
@@ -1144,7 +1098,7 @@ let exported = Object.assign(from, {
   , String$:   String$
   , Number$:   Number$
   , Primitive:    Primitive
-  , CashProperty: CashProperty
+  // , CashProperty: CashProperty
   , Xml:       Xml
   , map:       v => new Map$(v)
   , bin:      (v, type) => new Bin$(v, type)
