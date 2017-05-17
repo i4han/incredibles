@@ -14,7 +14,7 @@ if ('undefined' === typeof Meteor) {
     bypassRequire('underscore2')  }
     // path = bypassRequire('path')  }
 
-const TYPES = ['object', 'array', 'string', 'function', 'date', 'code']
+const TYPES = ['object', 'array', 'string', 'function', 'number', 'date', 'primitive']
 
 let logic  = new WeakMap()
 let result = new WeakMap()
@@ -48,8 +48,7 @@ const __type = (self, type) => {
     return self  }
 
 
-const __func  = (fn, o) => __.isFunction(fn) ? result.set(o, fn(o)) : result.set(o, fn)
-
+// const __func  = (fn, o) => __.isFunction(fn) ? result.set(o, fn(o)) : result.set(o, fn)
 // const __is = (answer, o, ...fn) =>
 //     fn.length === 0 ? answer ? true     : false :
 //     fn.length === 1 ? answer ? fn[0](o) : false :
@@ -246,9 +245,10 @@ const init = (self, ...args) => {
     let type = args[1]
     // console.log(arg, type, isTypeof(arg, type, 'function', Function, Function$))
     if ( self.unchained )
-        return from(copy(arg), type)
+        return from(copy(arg))
     arg = value(arg)
-    if ( undefined === arg || 'boolean' === typeof arg ||
+    if ( 'primitive' === type ||
+        undefined === arg || 'boolean' === typeof arg ||
         null === arg || Object.is(NaN, arg) ) {
         self.$.type = 'primitive'
         self.primitive = new Primitive(arg, self)
@@ -270,12 +270,10 @@ const init = (self, ...args) => {
         self.$.type = 'function'
         self.function = new Function$(arg, self)
         object.set(self, self.function)  }
-    else if ( 'code' === type ) {
-        self.$.type = 'code'
-        object.set(self, arg) }
     else {
         self.$.type = (undefined !== type) ? type : 'object'
-        object.set(self, arg) }
+        self.object = new Object$(arg, self)
+        object.set(self, self.object) }
     return self  }
 
 let cashProp = (self, p) => {
@@ -293,9 +291,21 @@ const setTo = (self, v, prop) => {
         v[0][v[1]] = self[prop]
     return self  }
 
-const fnValue = (self, f) =>
-    'function' === typeof f ? f(self.value) : f
+const fnValue = (self, f) => 'function' === typeof f ? f(self.value) : f
+const __then = (self, f, logic) => {
+    if (self.logic === logic)
+        __.isFunction(f) ?  self.result = f(self) : self.result = f
+    return self  }
+const __if = (self, f, p) => {
+    p = p || 'value'
+    self.logic = __.isFunction(f) ? !!f(self[p]) : is(self[p], f)
+    return self  }
 
+// thenTap
+// then
+// thenOver
+// thenChain
+// elseIf ()
 class Bin$ extends Object {
     constructor (arg, type) {
         super()
@@ -311,70 +321,51 @@ class Bin$ extends Object {
     to (...v)        { return setTo(this, v, 'value')  }
     logicTo (...v)   { return setTo(this, v, 'logic')  } // if
     resultTo (...v)  { return setTo(this, v, 'result') } // switch
-
-    typeof(v) { return __type(this, v) }
-    if (f)      {
-        logic.set( this, __.isFunction(f) ?
-            !!f(this) : is(this.value, f) )
-        return this  }
-    then (f)    {
-        if (logic.get(this) === true)
-            __.isFunction(f) ?
-                __func(f, this) : result.set(this, f)
-        return this  }
-    else (f)    {
-        if (logic.get(this) === false)
-            __.isFunction(f) ?
-                __func(f, this) : result.set(this, f)
-        return this  }
-    else_if (f) {
-        if (logic.get(this) === false)
-            logic.set(this, __.isFunction(f) ?
-                !!f(this) : is(this.value, f) )
-        return this }
+    type(v) { return __type(this, v) }
+    if (f)      { return __if(this, f) }
+    then (f)    { return __then(this, f, true) }
+    else (f)    { return __then(this, f, false) }
+    elseIf (f) { return this.logic === false ? __if(this, f) : this }
     switch (f)  { // setResult
-        return this.void( result.set(this, fnValue(this, f)) )  }
-    case (f)    {
-        logic.set(this,
-            __.isFunction(f) ?
-                !!f(this.result) :
-                is(this.result, f) )
-        return this  }
-
-    carry (f, ...v)     { return __carry(this, f, ...v) }
-    openCarry (f, ...v) { return __run(this, f, ...v)   }
-
+        return this.void( this.result = fnValue(this, f) ) }
+    case (f)    { return __if(this, f, 'result') }
     log (...f)  { return __log(this, ...f)  }
     void ()     { return this }
+    // carry (f, ...v)     { return __carry(this, f, ...v) }
+    // openCarry (f, ...v) { return __run(this, f, ...v)   }
     // prop (...p) { return __prop(this, ...p) }
     // setProp (p, v) { return this.void( this.$[p] = v ) }
     error (p, ...v) {
         console.log(p, ...v)
         return this  }
 
-    chain (...f)  { return this.from( f.reduce( (a,v) =>
+    chain (...f)     { return this.from( f.reduce( (a,v) =>
         Array.isArray(v) ? v[0](a, ...v.slice(1)) : v(a), this.value ) ) }
-    thru (f, ...args) { return this.from( f(this.value, ...args) )   }
-    over (f, ...args) { return f( this, ...args ) }
-    tap  (f, ...args) { return this.void( f( this.value, ...args ) ) }
+    chainOver (...f) { return f.reduce( (a,v) =>
+        Array.isArray(v) ? v[0](a, ...v.slice(1)) : v(a), this ) }
+    thru (f, ...args) { return this.from( f(this.value, ...args) ) }
+    tap  (f, ...args) { return this.void( f(this.value, ...args) ) }
+    return (f, ...args) { return 'function' === typeof f ? f(this.value, ...args) : f }
+    over (f, ...args)    { return this.from( f(this, ...args) ) }
+    tapOver (f, ...args) { return this.void( f(this, ...args) ) }
+    returnOver (f, ...args) { return f(this, ...args) }
+
     cut (v) { //  change to loose
         if (v === undefined)
              this.unchained = true
         else this.unchained = v
         return this  }
 
+// object
     delete (...keys) {
         if ( keys.length > 1 ) keys.map( v => delete this.value[v] )
         else delete this.value[ keys[0] ]
         return this  }
     remove (k)  { return this.save(k).delete(k) }
     restore (k) { return this.setAt( k, this.$.store[k] ) }
-    save (k) {
-        this.$.store[k] = this.at(k)
-        return this  }
+    save (k)    { return this.void( this.$.store[k] = this.at(k) ) }
 
-    add (...o) {
-        return __add(this, ...o)  }
+    add (...o)  { return __add(this, ...o) }  // recursive assign
 
     set (key, value) {
         if (this.$.type === 'array')
@@ -388,8 +379,8 @@ class Bin$ extends Object {
         if (k.length === 1)
             return this.set(k[0], value)
         else
-            this.setDefault(k[0], Number(k[1]).toString() === k[1] ? [] : {} )
-            .wrapAt(k[0])
+            this.setWhen(k[0], Number(k[1]).toString() === k[1] ? [] : {} )
+            .putAt(k[0])
             .setAt(...k.slice(1), value)
         return this  }
     assign (...obj) {  // assign this.add is recursive, assign is not
@@ -413,10 +404,13 @@ class Bin$ extends Object {
     at (...key) {
         return this.get( ...key.join('.').split('.') )  }
     pickAt (...key) { return this.from( this.at(...key) ) }
-    wrapAt (...key) { return  new Bin$( this.at(...key) ) }
-
+    putAt  (...key) { return  new Bin$( this.at(...key) ) }
+    switchAt (...key) {}
     size ()  { return this.keys().length }
-    clear () { return this.void( this.value = {} ) } // to do: clear not assign new
+    clear () {
+        for (let p in this.value)
+            delete this.value[p]
+        return this  } // to do: clear not assign new
     has (k)      { return k in this.value  }
     includes (v) { return this.values().includes(v) }
     forEach (f) {
@@ -464,7 +458,7 @@ class Bin$ extends Object {
     recursive (f) {
         return __recursive(this, f)  }
     copy (o)  {
-        if (this.typeof('string').logic)
+        if (this.type('string').logic)
             return new Object$(this.value, this.$.type)
         else {
             o = o || {}
@@ -508,14 +502,18 @@ class Bin$ extends Object {
     //     return this  }
     get first ()  { return this.keys()[0] }
     get last ()   { return this.keys()[ this.size() - 1 ] }
-    get result () { return result.get(this)  }
+    get result () { return result.get(this) }
     get logic ()  { return logic.get(this)  }
     get value ()  {
         if ('array' === this.$.type)
             return this.array.value
+        if ('object' === this.$.type)
+            return this.object.value
         let value // return value if 6 non value: false, null, NaN, undefined, '', 0
         return (value = object.get(this)) ? value.valueOf() : value  }
     // get __ ()        { return object.get(this)  }
+    set result (v) { return result.set(this, v) }
+    set logic (v)  { return logic.set(this, v)  }
 }
 
 
@@ -589,8 +587,8 @@ class Object$ extends Object {
         if (k.length === 1)
             return this.set(k[0], value)
         else
-            this.setDefault(k[0], Number(k[1]).toString() === k[1] ? [] : {} )
-            .wrapAt(k[0])
+            this.setWhen(k[0], Number(k[1]).toString() === k[1] ? [] : {} )
+            .putAt(k[0])
             .setAt(...k.slice(1), value)
         return this  }
     assign (...obj) {  // add?
@@ -616,7 +614,7 @@ class Object$ extends Object {
     at (...key) {
         return this.get( ...key.join('.').split('.') )  }
     pickAt (...key) { return this.from( this.at(...key) ) }
-    wrapAt (...key) { return new Object$( this.at(...key) ) }
+    putAt (...key) { return new Object$( this.at(...key) ) }
     size () { return this.keys().length }
     clear () {
         object.set(this, {})
@@ -660,7 +658,7 @@ class Object$ extends Object {
     recursive (f) {
         return __recursive(this, f)  }
     copy (o)  {
-        if (this.typeof('string').logic)
+        if (this.type('string').logic)
             return new Object$(this.value, this.$.type)
         else {
             o = o || {}
@@ -902,7 +900,7 @@ let attributeClass = (key, value) => __.isString(value) ? value.replace(/\*/g, _
   // *-ok *-good
 const htmlEntities = { '123': '{', '125': '}' }
 
-let displayValue = (v) =>
+let displayValue = v =>
   __.isEnclosedBy(v, '&#', ';') ? v.replace(/&#([0-9]{3});/g, (m, $1) => $1 in htmlEntities ? htmlEntities[$1] : m) : v
 
 let mustacheAttr = (v, f, _) =>
@@ -924,10 +922,12 @@ let blazeAttr = (_, obj) => {
   return __.keys(o).length === 1 && o[__.theKey(o)] === '' ? __.theKey(o) : o }
 
 htmlTags.forEach(tag => Template.prototype[tag] = function(...arr) {
-    return this.append([ 0 === arr.length ? HTML[tag]() : HTML[tag](...arr.into$
-        .reduceFn( (a,v) => a.append(
-            mustacheAttr(v, cube.lookupInView.bind(null, this.view), this.view) ),
-            v=>__.isBlazeAttr(v[0]) ? [ blazeAttr(this.view, v.shift()) ].into$ : [].into$ ).value  )])  })
+    return this.append(
+        [ 0 === arr.length ? HTML[tag]() :
+            HTML[tag](
+                ...arr.into$.reduceFn( (a,v) =>  a.append(
+                [mustacheAttr(v, cube.lookupInView.bind(null, this.view), this.view)]),
+                w=>__.isBlazeAttr(w[0]) ? [ blazeAttr(this.view, w.shift()) ].into$ : [].into$ ).value )  ]  )  })
 
 class Function$ extends Function {
     constructor (v, bin) {
@@ -993,7 +993,9 @@ class Primitive {
     get value () { return this.$.value }
 }
 
-let from = v => {
+let from = (...args) => {
+    if ( args.length > 1 )   return new Bin$(  args, 'array' )
+    let v = args[0]
     if ( v instanceof Date )     return new Bin$ (v, 'date'  )
     else if ( __.isFunction(v) ) return new Bin$ (v, 'function')
     else if ( __.isObject  (v) ) return new Bin$ (v, 'object')
@@ -1021,7 +1023,7 @@ let code = str => new Bin$(str[0], 'code')
 //         return this[k].value[w]  })  )
 
 from({
-    array:    ['sync', 'reload']
+    array:    ['sync', 'reload', 'out']
 })
 .forEach( (v,k)=>
     v.forEach( w => Bin$.prototype[w] = function (...x) {
@@ -1037,15 +1039,15 @@ from({
 
 from({
     array:
-        [ 'unique'   , 'difference'  , 'intersection' , 'union'  , 'slice'
-        , 'find'     , 'findIndex'   , 'join' ]
+        [ 'unique'  , 'difference' , 'intersection', 'union'     , 'slice'
+        , 'find'    , 'findIndex'  , 'join' ]
   , string:
-        [ 'camelize' , 'dasherize'
-        , 'charAt'   , 'charCodeAt'  , 'codePointAt'  , 'concat' , 'endsWith'
-        , 'includes' , 'indexOf'     , 'lastIndexOf'  , 'match'
-        , 'padEnd'   , 'padStart'    , 'repeat'       , 'replace'
-        , 'search'   , 'slice'       , 'split'        , 'startsWith'  , 'substr' , 'substring'
-                     , 'toLowerCase' , 'toUpperCase'  , 'trim']
+        [ 'camelize', 'dasherize'
+        , 'charAt'  , 'charCodeAt' , 'codePointAt' , 'concat'    , 'endsWith'
+        , 'includes', 'indexOf'    , 'lastIndexOf' , 'match'
+        , 'padEnd'  , 'padStart'   , 'repeat'      , 'replace'
+        , 'search'  , 'slice'      , 'split'       , 'startsWith', 'substring'
+        , 'substr'  , 'toLowerCase', 'toUpperCase' , 'trim']
   , function: ['invoke']
 })
 .forEach(  (v,k)=>
@@ -1123,14 +1125,12 @@ let exported = Object.assign(from, {
 
 
 let meteor = {}
-meteor.queryString = o => from(o)
-    .carry(  v => v.get('query').into$
+meteor.queryString = o => from(o).pickAt('query')
+    .over( v=>v
         .map( (w,k) => encodeURIComponent(k) + "=" + encodeURIComponent(w) )
         .join( v.value.delimeter || '&' )  )
-meteor.getUrlfromSettings = p => {
-    // console.log(0, new Object$(__._Settings))
-    return from(__._Settings).at(p).into$
-    .carry( v => v.value.url + '?' + meteor.queryString(v.value.options) ) }
+meteor.getUrlfromSettings = p => from(__._Settings).pickAt(p)
+    .return( v => v.url + '?' + meteor.queryString(v.options).value )
 
 
 let types = {

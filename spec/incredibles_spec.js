@@ -45,10 +45,10 @@ describe(  "Bin$", () => {
         () => expect(b.if({c:4, b:6}).logic)     .toEqual(true)  )
     it("is with true callback",
         () => expect(b.if({c:4, b:6}).then(v => 'ok').result).toEqual('ok')  )
-    it("typeof",
-        () => expect(b.typeof('object').logic) .toEqual(true)  )
-    it("typeof with true callback",
-        () => expect(b.typeof('object').then(v=>'good').result).toEqual('good')  )
+    it("type",
+        () => expect(b.type('object').logic) .toEqual(true)  )
+    it("type with true callback",
+        () => expect(b.type('object').then(v=>'good').result).toEqual('good')  )
     it("evalProperties type 1",
         () => expect(c.invokeProperties({name: 'ok'}).value).toEqual({a:'ok'})  )
     it("evalProperties type 2",
@@ -62,12 +62,12 @@ describe(  "Array$", () => {
     let b = in$([4,5,6,7,8])
     it("is",
         () => expect(a.if([1,2,3,4,5]).logic).toEqual(true) )
-    it("typeof",
-        () => expect(a.typeof('array').logic).toEqual(true) )
-    it("typeof returns true",
-        () => expect(a.typeof('array').then(v => 21).result).toEqual(21)  )
-    it("typeof returns false",
-        () => expect(a.typeof('object').then(21).else(23).result).toEqual(23)  )
+    it("type",
+        () => expect(a.type('array').logic).toEqual(true) )
+    it("type returns true",
+        () => expect(a.type('array').then(v => 21).result).toEqual(21)  )
+    it("type returns false",
+        () => expect(a.type('object').then(21).else(23).result).toEqual(23)  )
     it("length",
         () => expect(in$.from([1,1,1,1,1]).size()).toEqual(5)  )
     it("findIndex",
@@ -102,10 +102,10 @@ describe(  "String$", () => {
     in$.method('path', path.join)
     let s1 = in$('hello').cut()
     let s2 = in$('world')
-    it("typeof logic",
-        () => expect(s1.typeof('function').logic) .toEqual(false)  )
-    it("typeof result",
-        () => expect(s1.typeof('string').then('ok').result).toEqual('ok')  )
+    it("type logic",
+        () => expect(s1.type('function').logic) .toEqual(false)  )
+    it("type result",
+        () => expect(s1.type('string').then('ok').result).toEqual('ok')  )
     it("if then",
         () => expect(s1.if('hello').then(() => 3)  .result).toEqual(3)  )
     it("path",
