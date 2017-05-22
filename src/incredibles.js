@@ -872,6 +872,13 @@ class BlazView extends Bin$ {
 
 let range = (start, end, step) => {}
 
+/*
+;['Each', 'With'].forEach(tag => blaze[tag] = (_, lookup, func) => {
+//    __.isFunction(func) || console.log('blaze: arg3 must be a function')
+    return Blaze[tag](() => cube.lookup(_, lookup), func) })
+
+blaze.Each = (_, lookup, func) => Blaze.Each(() => cube.lookup(_, lookup), func)
+*/
 class Template extends Array$ {
     constructor (arg, name) {
         super()
@@ -879,15 +886,24 @@ class Template extends Array$ {
             name = arg.name
             arg = arg.view }
         property.set(this, {view: arg, name: name}) }
-    include (name, ...a) { return this.append([
+    each (lookup, f) {
+        return this.append([
+            Blaze.Each(()=>cube.lookup(this.view, lookup), ()=>f(new Template(this.view)) )  ])
+    }
+    with (lookup, f) {
+        return this.append([
+            Blaze.With(()=>cube.lookup(this.view, lookup), ()=>f(new Template(this.view)) )  ])        
+    }
+    include (name, ...a) { return this.append([ // append because push returns number of element not this.
         __.isUndefined(a)
-                     ? cube.include(     this.view, name) :
+                     ? cube.include(this.view, name) :
         a.length === 1 && __.isBlazeElement(a[0])
-                     ? cube.includeBlock(this.view, name, () => a) :
-        a.length > 1 ? cube.includeAttrBlock(this.view, name, a[0], () => a.slice(1))
+                     ? cube.includeBlock(this.view, name, ()=>a) :
+        a.length > 1 ? cube.includeAttrBlock(this.view, name, a[0], ()=>a.slice(1))
                      : cube.includeAttr( this.view, name, a[0]) ])}
-    id    (v, ...a) { return __htmlTag(this, 'DIV', {id: v},    ...a) }
-    class (v, ...a) { return __htmlTag(this, 'DIV', {class: v}, ...a) }
+    // id    (v, ...a) { return __htmlTag(this, 'DIV', {id: v},    ...a) }
+    id    (v, ...a) { return this.DIV({id:    v}, ...a) }
+    class (v, ...a) { return this.DIV({class: v}, ...a) }
     toHTML () { return HTML.toHTML(this.value) }
     get name () { return property.get(this).name }
     get view () { return property.get(this).view }
@@ -1111,7 +1127,7 @@ let exported = Object.assign(from, {
   , string:    v => new String$(v)
   , number:    v => new Number$(v)
   , primitive: v => new Primitive(v)
-  , module:    v => __.Module(v)
+  , module:    (...v) => __.Module(...v)
   , template:   (v, name) => new Template(v, name)
   , htmlElement: v        => new HtmlElement(v)
   , strip: strip
