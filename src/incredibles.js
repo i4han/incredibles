@@ -16,7 +16,7 @@ if ('undefined' === typeof Meteor) {
 
 const TYPES = ['object', 'array', 'string', 'function', 'number', 'date', 'primitive']
 
-let logic  = new WeakMap()
+let flag  = new WeakMap()
 let result = new WeakMap()
 let object   = new WeakMap()
 let property = new Map() // getter, setter
@@ -33,31 +33,16 @@ const is = (x, y) => {
         if ( ! is(x[p], y[p]) ) return false
     return true  }
 
-const value = v => // && 'object' === typeof v.$
-    'object' === typeof v && v.value ?
-        v.value : v
+const value = v =>  // && 'object' === typeof v.$
+    'object' === typeof v && v.constructor && ['Bin$', 'Object$', 'Array$', 'String$', 'Node'].includes(v.constructor.name) ? v.value : v
+
+
+const values = a => a.map(v => value(v))
 
 const copy = v =>
     v instanceof Array$ ? new Array$(v.value)  :
     Array.isArray(v)    ? Object.assign([], v) :
     __.isObject(v)      ? Object.assign({}, v) : v
-
-const __type = (self, type) => {
-    result.set(self, self.$.type)
-    logic.set(self, self.$.type === type)
-    return self  }
-
-
-// const __func  = (fn, o) => __.isFunction(fn) ? result.set(o, fn(o)) : result.set(o, fn)
-// const __is = (answer, o, ...fn) =>
-//     fn.length === 0 ? answer ? true     : false :
-//     fn.length === 1 ? answer ? fn[0](o) : false :
-//     fn.length === 2 ? answer ? fn[0](o) : fn[1](o)
-//                     : console.log('error: is')
-
-// const __checkProp = (self, o) => {
-//     // console.log(0, Object.keys(o).map(k => self[k] === o[k]).every(v=>v))
-//     return Object.keys(o).map(k => self[k] === o[k]).every(v=>v) }
 
 const __carry = (self, f, ...v) => {
     if (! __.isFunction(f)) return f
@@ -99,10 +84,11 @@ const __assign = (self, ...prop) => {
             self.set(k, p[k]) })
     return self  }
 
-const __add__ = (a, b) =>
+const __add__ = (a, b) => {
     Object.keys(b).forEach( k =>
         'object' === typeof a[k] && 'object' === typeof b[k] ?
             __add__(a[k], b[k]) : (a[k] = b[k]) )
+    return a }
 
 const __add = (self, ...o) => {
     o.reduce( (a,v) => __add__(a, v), self.value)
@@ -168,77 +154,6 @@ let bind = new Map$()
  * @return {Array$} keys of the Object$
  */
 
-class __CashProperty {
-    constructor (self) {
-        this.self = self
-        vars.set(this, {keys:[]})
-        object.set(this, {})
-        property.set(this, {})
-        descriptor.set(this, {})  }
-    create (p) {
-        if (p in this.vars.keys) return
-        this.vars.keys.push(p)
-        let desc = this.descriptor[p]
-        Object.defineProperty(this.prop, p, {
-            enumberable: true
-          , configurable: false
-          , get: () => {
-                if (desc && desc.onGet)
-                     return desc.onGet(this.self, this.value[p], p) // e = {newValue, oldValue, valueobj}
-                else return this.value[p]  }
-          , set: (v) => {
-                if (desc && desc.onSet)
-                    desc.onSet(this.self, this.value[p], p, v)
-                else this.value[p] = v
-                return this.self  }  })
-        this.descriptor[p] = {  // type, bindTo
-            type: undefined
-          , bindTo: []  }  }
-    let(...p) {
-        p.forEach(v => this.create(v))
-        return this.self  }
-    get prop ()  { return property.get(this) }
-    get vars ()  { return vars.get(this) }
-    get value () { return object.get(this) }
-    get descriptor ()  { return descriptor.get(this) }
-    set (p, v) {
-        if (this.has(p)) this.prop[p] = v
-        else {
-            this.create(p)
-            this.prop[p] = v }
-        return this.self  }
-    setDefault (p, v) {
-        if (this.value[p] === undefined)
-            this.set(p, v)
-        return this.self  }
-    setEagerly (p, f) {
-        this.set(p, f(this.self))
-        return this.self  }
-    get (p) { return this.prop[p] }
-    change (bindFrom, bindProp, p, v) {
-        this.prop[p] = v
-        return this.self  }
-    has (p)   { return this.vars.keys.includes(p) }
-    keys ()   { return this.vars.keys }
-    values () { return this.vars.keys.map(v => this.prop[v]) }
-    saveValueTo (p) { return this.set(p, this.self.value) }
-    restoreValueFrom (p) {
-        object.set(this.self, this.get(p))
-        return this.self  }
-    saveValuePropertyTo (...p)  {
-        p.forEach( v => this.set(v, this.self.at(v) ) )
-        return this.self  }
-    restoreValuePropertyFrom (...p) {
-        p.forEach( v => this.self.setAt(v, this.get(v) ) )
-        return this.self  }
-    removeValuePropertyTo (...p)  {
-        p.forEach( v => this.saveValuePropertyTo(v).delete(v)  )
-        return this.self  }
-    on (e, p, f) {
-        if (! (['onGet', 'onSet', 'onChange', 'onDelete', 'onError'].includes(e) && this.has(p)) )
-            return this.self
-        this.descriptor[p][e] = f
-        return this.self  }  }
 
 const init = (self, ...args) => {
     let arg = args.length > 0 ? args[0] : {}
@@ -292,62 +207,119 @@ const setTo = (self, v, prop) => {
     return self  }
 
 const fnValue = (self, f) => 'function' === typeof f ? f(self.value) : f
-const __then = (self, f, logic) => {
-    if (self.logic === logic)
+const __then = (self, f, flag) => {
+    if (self.flag === flag)
         __.isFunction(f) ?  self.result = f(self) : self.result = f
     return self  }
 const __if = (self, f, p) => {
     p = p || 'value'
-    self.logic = __.isFunction(f) ? !!f(self[p]) : is(self[p], f)
+    self.flag = __.isFunction(f) ? !!f(self[p]) : is(self[p], f)
     return self  }
 
+const duct = (...args) => {
+    let value = args.pop()
+    if ('function' === typeof args[0])
+        if (1 < args.length)
+            return args[0](value, ...args.slice(1))
+        else
+            return args[0](value)
+    else (1 === args.length && Array.isArray(args[0]))
+        return args[0].reduce( (a,v) => Array.isArray(v) ? v[0](a, ...v.slice(1)) : v(a), value )
+}
+
+const chain = (...args) => duct(...args)
 // thenTap
 // then
 // thenOver
 // thenChain
 // elseIf ()
+// selfIf(v=>v.flag === true)
+
 class Bin$ extends Object {
     constructor (arg, type) {
         super()
         cashProp(this, '$')
         .reactive('bin',    undefined)  // type, unchained, freeze, writable
-        .reactive('type',   undefined) // result, logic, error
+        .reactive('type',   undefined) // result, flag, error
         .reactive('source', undefined)
         .reactive('store',  {} )
         init(this, arg, type)  }
         // this.cash = new CashProperty(this)  }
     // get $ () { return this.cash.prop }
+    // from, switch, out,
     from (arg, type) { return init(this, arg, type)    }
-    to (...v)        { return setTo(this, v, 'value')  }
-    logicTo (...v)   { return setTo(this, v, 'logic')  } // if
-    resultTo (...v)  { return setTo(this, v, 'result') } // switch
-    type(v) { return __type(this, v) }
-    if (f)      { return __if(this, f) }
-    then (f)    { return __then(this, f, true) }
-    else (f)    { return __then(this, f, false) }
-    elseIf (f) { return this.logic === false ? __if(this, f) : this }
-    switch (f)  { // setResult
-        return this.void( this.result = fnValue(this, f) ) }
+    // to (...v)        { return setTo(this, v, 'value')  } should be this.to('flag', true)
+    // flagTo (...v)    { return setTo(this, v, 'flag')   } // .setTo('flag', true)
+    // resultTo (...v)  { return setTo(this, v, 'result') } // .setTo('result', 1) .setTo({}, 'a', 100)
+    switch (v) { return this.setIn('flag', v) }
+    setResult (v)  { return this.setIn('result', v) }
+    is (v)   { return this.switch( is(this.value, v) ) }
+    type (v) { return this.switch( v ? this.$.type === v : this.$.type ) }
     case (f)    { return __if(this, f, 'result') }
     log (...f)  { return __log(this, ...f)  }
-    void ()     { return this }
+    drop ()     { return this }
     // carry (f, ...v)     { return __carry(this, f, ...v) }
     // openCarry (f, ...v) { return __run(this, f, ...v)   }
     // prop (...p) { return __prop(this, ...p) }
-    // setProp (p, v) { return this.void( this.$[p] = v ) }
+    // setProp (p, v) { return this.drop( this.$[p] = v ) }
     error (p, ...v) {
         console.log(p, ...v)
         return this  }
 
-    chain (...f)     { return this.from( f.reduce( (a,v) =>
-        Array.isArray(v) ? v[0](a, ...v.slice(1)) : v(a), this.value ) ) }
-    chainOver (...f) { return f.reduce( (a,v) =>
+    // thru, tap, take, if
+    // chain, chainTap, chainTake, chainIf
+    // self, selfTap, selfTake, selfIf
+    // selfChain, selfChainTap, selfChainTake, selfChainIf
+    // then, thenTap, thenTake, thenIf
+    // thenChain, thenChainTap, thenChainTake, thenChainIf
+    // thenSelf, thenSelfTap, thenSelfTake, thenSelfIf
+    // thenSelfChain, thenSelfChainTap, thenSelfChainTake, thenSelfChainIf
+    // else, elseTap, elseTake, elseIf
+    // elseChain, elseChainTap, elseChainTake, elseChainIf
+    // elseSelf, elseSelfTap, elseSelfTake, elseSelfIf
+    // elseSelfChain, elseSelfChainTap, elseSelfChainTake, elseSelfChainIf
+    // case, caseTap, caseTake, caseIf
+    // caseChain, caseChainTap, caseChainTake, caseChainIf
+    // caseSelf, caseSelfTap, caseSelfTake, caseSelfIf
+    // caseSelfChain, caseSelfChainTap, caseSelfChainTake, caseSelfChainIf
+    if (f)      { return __if(this, f) }
+    then (f)    { return __then(this, f, true) }
+    else (f)    { return __then(this, f, false) }
+    elseIf (f) { return this.flag === false ? __if(this, f) : this }
+
+    // return (...args)    { return this.take(...args).result }
+
+    thru    (...args) { return this.from( duct(...args, this.value) ) }
+    tap     (...args) { return this.drop( duct(...args, this.value) ) }
+    if      (...args) { return this.switch( duct(...args, this.value) ) }
+    takeOff (...args) { return this.setResult( duct(...args, this.value) ) }
+    self        (...args) { return this.from( duct(...args, this) ) }
+    selfTap     (...args) { return this.drop( duct(...args, this) ) }
+    selfIf      (...args) { return this.switch( duct(...args, this) ) }
+    selfTakeOff (...args) { return this.setResult( duct(...args, this) ) }
+
+    thenThru   (...args) { return this.flag ? this.from( duct(...args, this.value) ) : this }
+    thenTap    (...args) { return this.flag ? this.drop( duct(...args, this.value) ) : this }
+    thenIf     (...args) { return this.flag ? this.switch( duct(...args, this.value) ) : this }
+    then       (...args) { return this.flag ? this.setResult( duct(...args, this.value) ) : this }
+    thenSelfThru   (...args) { return this.flag ? this.from( duct(...args, this) ) : this }
+    thenSelfTap    (...args) { return this.flag ? this.drop( duct(...args, this) ) : this }
+    thenSelfIf     (...args) { return this.flag ? this.switch( duct(...args, this) ) : this }
+    thenSelf       (...args) { return this.flag ? this.setResult( duct(...args, this) ) : this }
+
+    elseThru   (...args) { return ! this.flag ? this.from( duct(...args, this.value) ) : this }
+    elseTap    (...args) { return ! this.flag ? this.drop( duct(...args, this.value) ) : this }
+    elseIf     (...args) { return ! this.flag ? this.switch( duct(...args, this.value) ) : this }
+    else       (...args) { return ! this.flag ? this.setResult( duct(...args, this.value) ) : this }
+    elseSelfThru   (...args) { return ! this.flag ? this.from( duct(...args, this) ) : this }
+    elseSelfTap    (...args) { return ! this.flag ? this.drop( duct(...args, this) ) : this }
+    elseSelfIf     (...args) { return ! this.flag ? this.switch( duct(...args, this) ) : this }
+    elseSelf       (...args) { return ! this.flag ? this.setResult( duct(...args, this) ) : this }
+
+    over (...a)   { return this.self( ...a ) }
+    tapOver(...a) { return this.selfTap(...a) }
+    chainOver (...f)    { return f.reduce( (a,v) =>
         Array.isArray(v) ? v[0](a, ...v.slice(1)) : v(a), this ) }
-    thru (f, ...args) { return this.from( f(this.value, ...args) ) }
-    tap  (f, ...args) { return this.void( f(this.value, ...args) ) }
-    return (f, ...args) { return 'function' === typeof f ? f(this.value, ...args) : f }
-    over (f, ...args)    { return this.from( f(this, ...args) ) }
-    tapOver (f, ...args) { return this.void( f(this, ...args) ) }
     returnOver (f, ...args) { return f(this, ...args) }
 
     cut (v) { //  change to loose
@@ -363,7 +335,7 @@ class Bin$ extends Object {
         return this  }
     remove (k)  { return this.save(k).delete(k) }
     restore (k) { return this.setAt( k, this.$.store[k] ) }
-    save (k)    { return this.void( this.$.store[k] = this.at(k) ) }
+    save (k)    { return this.drop( this.$.store[k] = this.at(k) ) }
 
     add (...o)  { return __add(this, ...o) }  // recursive assign
 
@@ -383,6 +355,19 @@ class Bin$ extends Object {
             .putAt(k[0])
             .setAt(...k.slice(1), value)
         return this  }
+    setIn (prop, v) {
+        this[prop] = v
+        return this  }
+    let (...args) {
+        if (args.length === 1) {
+            if ('undefined' !== typeof window) window[args[0]]  = this.value
+            else global[args[0]] = this.value // length === 1 not string to be error
+        } else if (args.length === 2 && 'string' === typeof args[0]) {
+            if ('undefined' !== typeof window) window[args[0]]  = this[args[1]] // args[1 or 2] should be 'value', 'flag', 'result'
+            else global[args[0]]  = this[args[1]] // length === 1 not string to be error
+        } else if (args.length === 3 && 'string' === typeof args[1]) // args[0] is object
+            args[0][args[1]] = this[args[2]]
+        return this }
     assign (...obj) {  // assign this.add is recursive, assign is not
         __assign(this, obj[0])  // recursive obj reference assign
         return obj.length > 1 ? this.assign( ...obj.slice(1) ) : this  }
@@ -394,18 +379,18 @@ class Bin$ extends Object {
         (__.isFunction(f) ? f(this.at(key)) : this.at(key) === f) &&
             this.setAt(key, value)
         return this  }
-    setDefault (key, value) { return this.setWhen(key, value) }
-
-    // setResult (v) { return this.void( result.set(this, v) ) }
+    // setDefault (key, value) { return this.setWhen(key, value) }
+    // if(v=>v.at('ok')) ('ok', 10, v=>v.type('object').flag)
+    // setResult (v) { return this.drop( result.set(this, v) ) }
     get (...key) {
         // key.length > 3 & console.log(0, object.get(this))
         let k = this.value[ key[0] ]
         return key.length > 1 ? __get(k, ...key.slice(1)) : k  }
-    at (...key) {
-        return this.get( ...key.join('.').split('.') )  }
+    at (...key) { return this.get( ...key.join('.').split('.') )  }
     pickAt (...key) { return this.from( this.at(...key) ) }
     putAt  (...key) { return  new Bin$( this.at(...key) ) }
     switchAt (...key) {}
+    resultAt (...key) {}
     size ()  { return this.keys().length }
     clear () {
         for (let p in this.value)
@@ -413,6 +398,8 @@ class Bin$ extends Object {
         return this  } // to do: clear not assign new
     has (k)      { return k in this.value  }
     includes (v) { return this.values().includes(v) }
+    // forEach, map, filter, reduce should be conditional: Object$ or Array$
+
     forEach (f) {
         this.keys().forEach( k => f( this.get(k), k, this ) )
         return this  }
@@ -423,8 +410,8 @@ class Bin$ extends Object {
             if ( f(this.get(p), p, this) )
                 ret.set(p, this.get(p))
         return ret  }
-    reduce (f, init) {
-        let accumulator = init
+    reduce (f, init) { // Array$: reduce, reduceFn is different, Bin$ reduce takes both.
+        let accumulator = 'function' === typeof init ? init(this) : init
         for (let p in this.value)
             accumulator = f( accumulator, this.get(p), p, this)
         return accumulator  }
@@ -458,11 +445,11 @@ class Bin$ extends Object {
     recursive (f) {
         return __recursive(this, f)  }
     copy (o)  {
-        if (this.type('string').logic)
-            return new Object$(this.value, this.$.type)
+        if (this.type('string').result)
+            return new Bin$(new Object$(this.value, this.$.type))
         else {
             o = o || {}
-            return new Object$( Object.assign(o, this.value,   Object.assign({}, o)), this.$.type ) }  }
+            return new Bin$(new Object$( Object.assign(o, this.value,   Object.assign({}, o)), this.$.type )) }  }
     // paste (o) {
     //     let copied = this.cash.get('@clipboard')
     //     if ('string' === copied.type)
@@ -503,8 +490,9 @@ class Bin$ extends Object {
     get first ()  { return this.keys()[0] }
     get last ()   { return this.keys()[ this.size() - 1 ] }
     get result () { return result.get(this) }
-    get logic ()  { return logic.get(this)  }
+    get flag ()   { return flag.get(this)  }
     get value ()  {
+        // return this.type('array').then(this.array)Return(this.object.value)
         if ('array' === this.$.type)
             return this.array.value
         if ('object' === this.$.type)
@@ -512,8 +500,9 @@ class Bin$ extends Object {
         let value // return value if 6 non value: false, null, NaN, undefined, '', 0
         return (value = object.get(this)) ? value.valueOf() : value  }
     // get __ ()        { return object.get(this)  }
-    set result (v) { return result.set(this, v) }
-    set logic (v)  { return logic.set(this, v)  }
+    set value (v)  { this.from(v) }
+    set result (v) { result.set(this, v)  }
+    set flag (v)   { flag.set(this, v)    }
 }
 
 
@@ -576,7 +565,6 @@ class Object$ extends Object {
         return this  }
     add (...o) {
         return __add(this, ...o)  }
-
     set (key, value) {
         this.value[key] = value
         return this  }
@@ -602,7 +590,7 @@ class Object$ extends Object {
             this.setAt(key, value)
         return this  }
     setDefault (key, value) { return this.setWhen(key, value) }
-    put (...args) {   // <-> take
+    put (...args) {   // rename 'to'
         if (args.length === 1 && 'string' === typeof args[0])
             global[args[0]]  = this.value // length === 1 not string to be error
         else if (args.length === 2)
@@ -635,11 +623,17 @@ class Object$ extends Object {
             if ( f(this.get(p), p, this) )
                 ret.set(p, this.get(p))
         return ret  }
-    reduce (f, init) {
-        let accumulator = init
+    // reduce (f, init) {
+    //     let accumulator = init
+    //     for (let p in this.value)
+    //         accumulator = f( accumulator, this.get(p), p, this)
+    //     return accumulator  }
+    reduce (f, init) { // Array$: reduce, reduceFn is different, Bin$ reduce takes both.
+        let accumulator = 'function' === typeof init ? init(this) : init
         for (let p in this.value)
             accumulator = f( accumulator, this.get(p), p, this)
         return accumulator  }
+
     // MVCObject bindto, addListener, changed, notify
     // entries () {
     //     return this.keys().map( k => [k, this.get(k)] )  }
@@ -658,7 +652,7 @@ class Object$ extends Object {
     recursive (f) {
         return __recursive(this, f)  }
     copy (o)  {
-        if (this.type('string').logic)
+        if (this.type('string').result)
             return new Object$(this.value, this.$.type)
         else {
             o = o || {}
@@ -697,7 +691,7 @@ class Object$ extends Object {
     get first () { return this.keys()[0] }
     get last ()  { return this.keys()[ this.size() - 1 ] }
     get result () { return result.get(this) }
-    get logic ()  { return logic.get(this)  }
+    get flag ()  { return flag.get(this)  }
     get value ()  {
         let value = object.get(this)
         return value ? value.valueOf() : value  }
@@ -705,19 +699,21 @@ class Object$ extends Object {
 
 
 // let Object$ = Bin$
-const method = (name, func) =>
-    __.isObject(name) ? Object.keys(name).forEach( k =>
-        (Bin$.prototype[k] =
-            Array.isArray(name[k]) ?
-                function (...x) { return this.chain([...name[k]].concat(x)) } :
-                function (...x) { return this.chain([name[k], ...x]) }  ) )
-    :   (Bin$.prototype[name] = function (...v) {
-        return this.chain([func, ...v]) })
+const ductMethod = (name, method, func) =>
+    Bin$.prototype[name] = function (...v) { return this[method](func, ...v) }
 
-class HtmlElement extends Bin$ { constructor (arg) { super(arg) } }
-['appendChild', 'addEventListener'].forEach( v =>
-    HtmlElement.prototype[v] = function (...x) {
-        return this.switch( this.value[v](...x) )  })
+
+class Node extends Bin$ {  // HtmlElement
+    constructor (arg) { super(arg) }
+}
+
+;['appendChild', 'addEventListener'].forEach( v =>
+    Node.prototype[v] = function (...x) {
+        return this.switch( this.value[v](...values(x)) )  })
+
+let getNode = v =>
+    '#' === v[0] ? new Node(document.getElementById(v)) :
+    /^[a-z]$/i.test(v[0]) ? new Node(document.getElementsByTagName(v)[0]) : undefined
 
 const xmlObject = o => {
     let value = {}
@@ -757,10 +753,10 @@ class Xml extends Bin$ {
         super(arg)
         this.$.root = from( stepIn(this.value) )
     }
-    root (p)     { return this.void( this.$.root = from( findRoot(this.value, p)[0] ) ) }
-    insert (obj) { return this.void( this.$.root.assign( xmlObject(obj) ) ) }
-    removeElement (p)  { return this.void( this.$.root.remove(p) )  }
-    restoreElement (p) { return this.void( this.$.root.restore(p) ) }
+    root (p)     { return this.drop( this.$.root = from( findRoot(this.value, p)[0] ) ) }
+    insert (obj) { return this.drop( this.$.root.assign( xmlObject(obj) ) ) }
+    removeElement (p)  { return this.drop( this.$.root.remove(p) )  }
+    restoreElement (p) { return this.drop( this.$.root.restore(p) ) }
     findEvery (p, f) {
         const element = (o, prop) => {
             for (let i = 0; i < o.length; i++) {
@@ -775,6 +771,72 @@ class Xml extends Bin$ {
         return this  }
     insertEvery (p, obj) { return this.findEvery( p, v => v.assign(xmlObject( obj )) ) }
     removeEvery (p)      { return this.findEvery( p, (v, w) => w.delete(p) )  }  }
+
+
+class Color extends Object {
+    constructor (color, colorString, ...args) {
+        super()
+        let background, primary, angle, angle2
+        if ('string' === typeof args[0]) {
+            background = args[0]
+            angle  = args[1]
+            angle2 = args[2]
+        } else {
+            angle  = args[0]
+            angle2 = args[1]
+        }
+        background = background || 'white'
+        angle   = angle || 30
+        angle2  = angle2 || angle * -1
+        primary = color(colorString)
+
+        this.scheme = [
+            color(background)
+          , primary
+          , primary.rotate(angle)
+          , primary.rotate(angle2)
+      ]
+    }
+    alpha (i, v) { return this.fade(i, v) }
+    get background() { return this.scheme[0].string() }
+    get negative()   { return this.scheme[0].negate().string() }
+    get primary()    { return this.scheme[1].string() }
+    get secondary()  { return this.scheme[2].string() }
+    get tertiary()   { return this.scheme[3].string() }
+}
+
+let colorIndex = (a, i) => {
+    return i < 0 ? a[-i].negate() : a[i]
+}
+
+let color = (cm, color, ...args) => {
+    let background, primary, angle, angle2, fn, bg
+    if ('string' === typeof args[0]) {
+        background = args[0]
+        angle  = args[1]
+        angle2 = args[2]
+    } else {
+        angle  = args[0]
+        angle2 = args[1]
+    }
+    angle   = angle || 30
+    fn = colorIndex.bind(null, [
+        bg = cm(background || 'white')
+      , primary = cm(color)
+      , primary.rotate(angle)
+      , primary.rotate(angle2 || angle * -1)
+      , bg.negate()
+      , bg.mix(bg.negate())])
+    fn.step = 0.2
+    fn.bound = 'colorIndex'
+    return fn
+}
+
+// ;['darken', 'lighten', 'desaturate', 'fade']
+// .forEach(method => Color.prototype[method] = function(i, v) {
+//     if (i < 0) return this.scheme[-i].negate()[method](v).string()
+//     else return this.scheme[i][method](v).string()
+// })
 
 class Array$ extends Array {
     constructor (arg, bin) {
@@ -792,7 +854,7 @@ class Array$ extends Array {
         console.log('error')
         return v  }
     carry (f, ...v)   { return __carry(this, f, ...v) }
-    out (v) {
+    print (v) {
         v = undefined === v ? ' ' : v
         console.log( this.join(v) )
         return this }
@@ -819,29 +881,35 @@ class Array$ extends Array {
     reduceFn (f, initialValue) {
         return from( this.reduce(f, initialValue(this)) )  }
     unique (f) {
-        f = f || (v => w => v === w)
-        return this.filter( (v, i) => this.findIndex( f(v, i) ) === i )  }
+        f = f || ((v, w) => v === w)  // changed from v => w => v===W
+        return this.filter( v=>this.findIndex( f.bind(null, v) ) === i )  }
     intersection (b, f) {
         let bIndex
-        f = f || (v => w => v === w)
+        f = f || ((v, w) => v === w)
         if ( b instanceof Bin$ )
             b = b.array
         let ret = new Array$()
-        this.forEach( (v,i) => b.findIndex( f(v, i) ) !== -1 && ret.push(v)  )
+        this.forEach( v => {
+            let index = b.findIndex( f.bind(null, v) )
+            if (index !== -1)
+                if ('object' === typeof v)
+                    ret.push( Object.assign({}, v, b[index]) )
+                else       // ^^^ {k:'find', a:1}, {k:'find', b:1} => {k:'find', a:1, b:1}
+                    ret.push(v)  })
         return ret  }
     difference (b, f) {
-        f = f || (v => w => v === w)
+        f = f || ((v, w) => v === w)
         if ( b instanceof Bin$ )
             b = b.array
-        return this.filter( (v,i) => b.findIndex( f(v, i) ) === -1 )  }
+        return this.filter( v=> b.findIndex( f.bind(null, v) ) === -1 )  }
     union (b, f) {
-        f = f || (v => w => v === w)
+        f = f || ((v, w) => v === w)
         if ( b instanceof Bin$ )
             b = b.array
         if ( ! (b instanceof Array$) )
             b = new Array$(b)  // to check b is array
         let ret = this.$.bin.unchained ? copy(this) : this
-        return ret.append(b.filter( (v,i) => this.findIndex( f(v, i) ) === -1 ) ) }
+        return ret.append(b.filter( v=> this.findIndex( f.bind(null, v) ) === -1 ) ) }
     sum (f) {
         f = f || (v => v)
         return this.reduce(((a,v) => a += f(v)), 0) }
@@ -850,9 +918,11 @@ class Array$ extends Array {
         return this.reduce(((a,v) => __.isNumber(f(v)) ? a += 1 : a), 0)  }
     average (f) {
         return this.sum(f) / this.count(f)  }
+    get firstValue() { return this.value[ 0 ] }
+    get lastValue()  { return this.value[ this.value.length - 1 ] }
     get value ()  { return this.sync().$.source }
     get result () { return result.get(this) }
-    get logic ()  { return logic.get(this)  }  }
+    get flag ()  { return flag.get(this)  }  }
 
 const __htmlTag = (self, tag, attr, ...a) =>
     self.append([HTML[tag](  attr, ...a.map(  v =>
@@ -884,15 +954,25 @@ class Template extends Array$ {
         super()
         if (arg instanceof Template) {
             name = arg.name
-            arg = arg.view }
+            arg  = arg.view }
         property.set(this, {view: arg, name: name}) }
+    lookup (v, f) {
+        return ('function' === typeof f) ?
+            f(Blaze.toHTML(mustacheAttr(v, cube.lookupInView.bind(null, this.view), this.view)))
+            : mustacheAttr(v, cube.lookupInView.bind(null, this.view), this.view)
+    }
+    render (v, f) { return Blaze.toHTML(this.lookup(v, f)) }
+    raw (v) { return this.append( [HTML.Raw(v)] ) }
+    for (a, f) {
+        return this.append( a.map(w => f(new Template(this.view), w)) )
+    }
     each (lookup, f) {
         return this.append([
             Blaze.Each(()=>cube.lookup(this.view, lookup), ()=>f(new Template(this.view)) )  ])
     }
     with (lookup, f) {
         return this.append([
-            Blaze.With(()=>cube.lookup(this.view, lookup), ()=>f(new Template(this.view)) )  ])        
+            Blaze.With(()=>cube.lookup(this.view, lookup), ()=>f(new Template(this.view)) )  ])
     }
     include (name, ...a) { return this.append([ // append because push returns number of element not this.
         __.isUndefined(a)
@@ -900,15 +980,20 @@ class Template extends Array$ {
         a.length === 1 && __.isBlazeElement(a[0])
                      ? cube.includeBlock(this.view, name, ()=>a) :
         a.length > 1 ? cube.includeAttrBlock(this.view, name, a[0], ()=>a.slice(1))
-                     : cube.includeAttr( this.view, name, a[0]) ])}
-    // id    (v, ...a) { return __htmlTag(this, 'DIV', {id: v},    ...a) }
-    id    (v, ...a) { return this.DIV({id:    v}, ...a) }
+                     : cube.includeAttr( this.view, name, a[0]) ])
+    }
+    id    (v, ...a) { return this.DIV({id: v}, ...a) }
     class (v, ...a) { return this.DIV({class: v}, ...a) }
-    toHTML () { return HTML.toHTML(this.value) }
+    toHTML ()   { return HTML.toHTML(this.value) }
     get name () { return property.get(this).name }
     get view () { return property.get(this).view }
 }
 
+let define = (name, f) => Template.prototype[name] = function (...v) {
+    return f(this, ...v)
+}
+
+let mixin = (name, f) => __.Mixin(name, f)
 // I will clean up when I have time.
 
 const htmlTags = 'a abbr acronym address applet area article aside audio b base basefont bdi bdo big blockquote body br button canvas caption center cite code col colgroup command data datagrid datalist dd del details dfn dir div dl dt em embed eventsource fieldset figcaption figure font footer form frame frameset h1 h2 h3 h4 h5 h6 head header hgroup hr html i iframe img input ins isindex kbd keygen label legend li link main map mark menu meta meter nav noframes noscript object ol optgroup option output p param pre progress q rp rt ruby s samp script section select small source span strike strong style sub summary sup table tbody td textarea tfoot th thead time title tr track tt u ul var video wbr'.toUpperCase().split(' ')
@@ -935,7 +1020,12 @@ let blazeAttr = (_, obj) => {
       'local' === k ?
         __.object(o, 'id', __.isBlazeView(_) ? __.key2id.call(__.module(_), fo[k]) : mustacheAttr(fo[k], f, _)) :
         __.object(o, k, mustacheAttr(fo[k], f, _)))
-  return __.keys(o).length === 1 && o[__.theKey(o)] === '' ? __.theKey(o) : o }
+  return __.keys(o).length === 1 && o[__.theKey(o)] === '' ? __.theKey(o) : o } // return keyonly, 'script="/hello"': ''
+
+
+let blazeAttrs = (view, fo) =>
+    new Bin$(fo).reduce(((a, v, k) =>
+          a.set(from(k).dasherize().value, mustacheAttr(v, cube.lookupInAttr.bind(null, view), view) ) ), new Bin$({}) ).value
 
 htmlTags.forEach(tag => Template.prototype[tag] = function(...arr) {
     return this.append(
@@ -943,7 +1033,8 @@ htmlTags.forEach(tag => Template.prototype[tag] = function(...arr) {
             HTML[tag](
                 ...arr.into$.reduceFn( (a,v) =>  a.append(
                 [mustacheAttr(v, cube.lookupInView.bind(null, this.view), this.view)]),
-                w=>__.isBlazeAttr(w[0]) ? [ blazeAttr(this.view, w.shift()) ].into$ : [].into$ ).value )  ]  )  })
+                w=>__.isBlazeAttr(w[0]) ? [ blazeAttrs(this.view, w.shift()) ].into$ : [].into$ ).value )  ]  )  })
+
 
 class Function$ extends Function {
     constructor (v, bin) {
@@ -958,9 +1049,9 @@ class Function$ extends Function {
         this.$.value(...v)
         return this  }
     invoke (...v) { return this.$.value(...v) }
+    toString ()   { return this.$.value.toString() }
     get legnth () { return this.$.value.length }
     get name ()   { return this.$.value.name }
-    toString ()   { return this.$.value.toString() }
     get value ()  { return this.$.value  }
 }
 
@@ -978,6 +1069,8 @@ class String$ extends String {
         return this.replace( /([A-Z])/g,  $1 => '-' + $1.toLowerCase() ) }
     get value () { return this.valueOf()  }
 }
+
+let string = v => new String$(v)
 
 
 class Number$ extends Number {
@@ -1010,7 +1103,7 @@ class Primitive {
 }
 
 let from = (...args) => {
-    if ( args.length > 1 )   return new Bin$(  args, 'array' )
+    if ( args.length > 1 )       return new Bin$(  args, 'array' )
     let v = args[0]
     if ( v instanceof Date )     return new Bin$ (v, 'date'  )
     else if ( __.isFunction(v) ) return new Bin$ (v, 'function')
@@ -1028,7 +1121,7 @@ let strip = v => {
     if ( v instanceof String$ || v instanceof Function$ ) v = v.value
     return v ? v.valueOf() : v  }
 
-let code = str => new Bin$(str[0], 'code')
+let code = str => new Bin$(str[0], 'code') // no use.
 // let range = (start, end, step) =>
 
 // from({
@@ -1038,37 +1131,62 @@ let code = str => new Bin$(str[0], 'code')
 //     v.forEach( w => Bin$.prototype[w] = function (...x) {
 //         return this[k].value[w]  })  )
 
-from({
-    array:    ['sync', 'reload', 'out']
-})
-.forEach( (v,k)=>
-    v.forEach( w => Bin$.prototype[w] = function (...x) {
-        this[k][w](...x)
-        return this  })  )
+// return getter's result
+
+// ;['forEach', 'map', 'filter', 'reduce']
+// .forEach( v=> Bin$.prototype[v] = function (...x) {
+//     // console.log(this.type('object').result, this.type('object').result, this.type)
+//     this.type('object').result ? this.object[v](...x) :
+//     this.type('array' ).result ? this.array [v](...x) : undefined
+//     return this
+// })
+
+
+    // this.type('string').result ? this.string[v](...x) : undefined 'h', 'e', 'l', 'l', 'o' ; regex no need
+    // this.type('number').result ? this.number[v](...x) : undefined '30000', '2000', '400', '20', '6' ; no need
 
 from({
-    array: ['push', 'pop', 'shift', 'unshift', 'splice', 'append']
-})
-.forEach( (v,k)=>
-    v.forEach( w => Bin$.prototype[w] = function (...x) {
-        return this.switch( this[k][w](...x) )  })  )
+    array:    ['firstValue', 'lastValue']
+}).forEach( (v,k)=> // define getter
+    v.forEach( w =>
+        Object.defineProperty(Bin$.prototype, w, {
+            get: function () { return this[k][w] }
+        })  )  )
 
+        // Bin$.prototype[w] = function () {
+        // return this[k][w] })  )
+
+// excute the function and result became new value: x.value
 from({
     array:
-        [ 'unique'  , 'difference' , 'intersection', 'union'     , 'slice'
-        , 'find'    , 'findIndex'  , 'join' ]
+        [ 'unique'  , 'difference' , 'intersection', 'union'   , 'slice'
+        , 'find'    , 'findIndex'  , 'join', 'sum' , 'average' , 'count' ]
   , string:
         [ 'camelize', 'dasherize'
-        , 'charAt'  , 'charCodeAt' , 'codePointAt' , 'concat'    , 'endsWith'
+        , 'charAt'  , 'charCodeAt' , 'codePointAt' , 'concat'  , 'endsWith'
         , 'includes', 'indexOf'    , 'lastIndexOf' , 'match'
         , 'padEnd'  , 'padStart'   , 'repeat'      , 'replace'
         , 'search'  , 'slice'      , 'split'       , 'startsWith', 'substring'
         , 'substr'  , 'toLowerCase', 'toUpperCase' , 'trim']
   , function: ['invoke']
-})
-.forEach(  (v,k)=>
+}).forEach(  (v,k)=>
     v.forEach(  w => Bin$.prototype[w] = function (...x) {
         return this.from( this[k][w](...x) )  })  )
+
+// excute the function, discard the result and return this to chain.
+from({
+    array:    ['sync', 'reload', 'print']
+}).forEach( (v,k)=>
+    v.forEach( w => Bin$.prototype[w] = function (...x) {
+        return this.drop( this[k][w](...x) )  })  )
+
+// excute the function put result *switch* to evaluate condition: x.result
+from({
+    array: ['push', 'pop', 'shift', 'unshift', 'splice', 'append']
+}).forEach( (v,k)=>
+    v.forEach( w => Bin$.prototype[w] = function (...x) {
+        return this.switch( this[k][w](...x) )  })  )
+
 
 
 let prop = 'into$'
@@ -1106,7 +1224,9 @@ if (prop) {
 
 let exported = Object.assign(from, {
     from:      from
-  , code:      code
+  // , code:      code
+  , define:    define
+  , mixin:     mixin
   , Bin$:      Bin$
   , Map$:      Map$
   , Object$:   Object$
@@ -1124,15 +1244,21 @@ let exported = Object.assign(from, {
   , date:      v => new Date$(v)
   , object:    v => new Object$(v)
   , array:     v => new Array$(v)   // range(1,20) (2,20,3)
-  , string:    v => new String$(v)
+  , string:    string
   , number:    v => new Number$(v)
   , primitive: v => new Primitive(v)
   , module:    (...v) => __.Module(...v)
+  , css:       o => __.CSS(o)
+  // , _color:     (...v) => new Color(...v)
   , template:   (v, name) => new Template(v, name)
-  , htmlElement: v        => new HtmlElement(v)
-  , strip: strip
-  , method: method
-  , is: is
+  , htmlElement: v => new Node(v) // remove only map.js use it
+  , node:        v => new Node(v)
+  , createNode:  v => new Node(document.createElement(v))
+  , getNode:     v => getNode(v)
+  , color:  color
+  , strip:  strip
+  , ductMethod: ductMethod
+  , is:     is
   // , range:     range
   // , IncredifyProperty: augument
   // , fileFrom('hello')

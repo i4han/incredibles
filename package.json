@@ -1,6 +1,6 @@
 {
   "name": "incredibles",
-  "version": "0.0.57",
+  "version": "0.0.66",
   "description": "Incredible Object",
   "main": "src/incredibles.js",
   "files": ["src"],

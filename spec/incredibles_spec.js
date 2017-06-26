@@ -11,7 +11,7 @@ describe(  "Bin$", () => {
     it("set",
         () => expect(b.set('a', 4).value)   .toEqual({a:4})  )
     it("is",
-        () => expect(b.if({a: 4}).logic)    .toEqual(true)  )
+        () => expect(b.is({a: 4}).flag)    .toEqual(true)  )
     it("setAt",
         () => expect(b.setAt('b.c', 3).value).toEqual({a:4,b:{c:3}})  )
     it("delete",
@@ -42,11 +42,11 @@ describe(  "Bin$", () => {
     it("restore",
         () => expect(b.restore('c').value)       .toEqual({c:4, b:6})  )
     it("is",
-        () => expect(b.if({c:4, b:6}).logic)     .toEqual(true)  )
+        () => expect(b.is({c:4, b:6}).flag)     .toEqual(true)  )
     it("is with true callback",
-        () => expect(b.if({c:4, b:6}).then(v => 'ok').result).toEqual('ok')  )
+        () => expect(b.is({c:4, b:6}).then(v => 'ok').result).toEqual('ok')  )
     it("type",
-        () => expect(b.type('object').logic) .toEqual(true)  )
+        () => expect(b.type('object').flag) .toEqual(true)  )
     it("type with true callback",
         () => expect(b.type('object').then(v=>'good').result).toEqual('good')  )
     it("evalProperties type 1",
@@ -61,13 +61,13 @@ describe(  "Array$", () => {
     let a = in$([1,2,3,4,5])
     let b = in$([4,5,6,7,8])
     it("is",
-        () => expect(a.if([1,2,3,4,5]).logic).toEqual(true) )
+        () => expect(a.is([1,2,3,4,5]).flag).toEqual(true) )
     it("type",
-        () => expect(a.type('array').logic).toEqual(true) )
+        () => expect(a.type('array').flag).toEqual(true) )
     it("type returns true",
-        () => expect(a.type('array').then(v => 21).result).toEqual(21)  )
+        () => expect(a.type('array').then(v=>21).result).toEqual(21)  )
     it("type returns false",
-        () => expect(a.type('object').then(21).else(23).result).toEqual(23)  )
+        () => expect(a.type('object').then(v=>21).else(v=>23).result).toEqual(23)  )
     it("length",
         () => expect(in$.from([1,1,1,1,1]).size()).toEqual(5)  )
     it("findIndex",
@@ -81,9 +81,9 @@ describe(  "Array$", () => {
     it("difference",
         () => expect(a.difference(b).value)  .toEqual([1,2,3]) )
     it("'is' returns true",
-        () => expect(a.if([1,2,3,4,5]).logic).toEqual(true)  )
+        () => expect(a.is([1,2,3,4,5]).flag).toEqual(true)  )
     it("'is' returns false",
-        () => expect(a.if([1,2,3,4]).logic)  .toEqual(false)  )
+        () => expect(a.is([1,2,3,4]).flag)  .toEqual(false)  )
 })
 
 describe(  "Function", () => {
@@ -99,25 +99,25 @@ describe(  "Function", () => {
 let path = require('path')
 
 describe(  "String$", () => {
-    in$.method('path', path.join)
+    in$.ductMethod('path', 'thru', path.join)
     let s1 = in$('hello').cut()
     let s2 = in$('world')
     it("type logic",
-        () => expect(s1.type('function').logic) .toEqual(false)  )
+        () => expect(s1.type('function').flag) .toEqual(false)  )
     it("type result",
-        () => expect(s1.type('string').then('ok').result).toEqual('ok')  )
-    it("if then",
-        () => expect(s1.if('hello').then(() => 3)  .result).toEqual(3)  )
+        () => expect(s1.type('string').then(v=>'ok').result).toEqual('ok')  )
+    it("is then",
+        () => expect(s1.is('hello').then(v=>3).result).toEqual(3)  )
     it("path",
         () => expect(s1.path('home',   'client').value).toEqual('hello/home/client')  )
     it("path",
         () => expect(s1.path(s2.value, 'client').value).toEqual('hello/world/client')  )
     it("value",
         () => expect(s1.value)                         .toEqual('hello')  )
-    it("if true",
-        () => expect(s1.if('hello').then( w=>w.value + 'o' ).result).toEqual('helloo')  )
-    it("if false",
-        () => expect(s1.if('hellx').else( x=>x.value + 'p' ).result).toEqual('hellop')  )
+    it("'is' true",
+        () => expect(s1.is('hello').then( w=>w + 'o' ).result).toEqual('helloo')  )
+    it("'is' false",
+        () => expect(s1.is('hellx').else( x=>x + 'p' ).result).toEqual('hellop')  )
     it("camelize",
         () => expect(in$('hello-world').camelize().value) .toEqual('helloWorld') )
     it("dasherize",
