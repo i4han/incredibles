@@ -24,6 +24,35 @@ let heap     = new Map()
 let vars     = new Map()
 let descriptor = new Map() // descriptor, value
 
+__.t     = (v, t) => 'function' === typeof t ? (v === t ? t() : t(v)) : 'undefined' === typeof t ? true  : t
+__.f     = (v, f) => 'function' === typeof f ? (v === f ? f() : f(v)) : 'undefined' === typeof f ? false : f
+// __.isTrue  = (v, t) => { v && __.t(v, t); return !!v === true  }
+// __.isFalse = (v, f) => { v || __.f(v, f); return !!v === false }
+__.isIt  = (v, it, t, f) => it ? (__.t(v, t) || true) : (__.f(v, f) && false)
+__.isFunction   = (v, t, f) => __.isIt(v, 'function'  === typeof v, t, f)
+__.isUndefined  = (v, t, f) => __.isIt(v, 'undefined' === typeof v, t, f)
+__.isString     = (v, t, f) => __.isIt(v, 'string'    === typeof v, t, f)
+__.isNumber     = (v, t, f) => __.isIt(v, ! isNaN(v) && 'number' === typeof v, t, f)
+__.isBoolean    = (v, t, f) => __.isIt(v, 'boolean'   === typeof v, t, f)
+__.isDate       = (v, t, f) => __.isIt(v, v instanceof Date, t, f)
+__.isScalar     = (v, t, f) => __.isIt(v, __.isNumber(v) || __.isString(v) || __.isBoolean(v), t, f)
+__.isArray      = (v, t, f) => __.isIt(v, '[object Array]'     === Object.prototype.toString.call(v), t, f)
+__.isObject     = (v, t, f) => __.isIt(v, '[object Object]'    === Object.prototype.toString.call(v), t, f)
+// __.isArguments  = (v, t, f) => __.isIt(v, '[object Arguments]' === Object.prototype.toString.call(v), t, f)
+// __.isArrayLike  = (v, t, f) => __.isIt(v, __.isArray(v) || __.isArguments(v), t, f)
+
+let isString = v => typeof v === 'string' || v instanceof String
+let isNumber = v => typeof v === 'number' && isFinite(v) && ! isNaN(v)
+let isArray = v => Array.isArray(v)
+let isObject = v => typeof v === 'object' && v !== null && v.constructor === Object
+let isFunction = v => typeof v === 'function'
+let isUndefined = v => typeof v === 'undefined'
+let isBoolean = v => typeof v === 'boolean'
+let isScalar = v => isString(v) || isNumber(v) || isBoolean(v) 
+let isDate = v => v instanceof Date
+
+// isNull = v => v === null
+
 const is = (x, y) => {
     if ( Object.is(x, y) ) return true
     if ( 'object' !== typeof y || 'object' !== typeof x ||
@@ -34,8 +63,9 @@ const is = (x, y) => {
     return true  }
 
 const value = v =>  // && 'object' === typeof v.$
-    'object' === typeof v && v.constructor && ['Bin$', 'Object$', 'Array$', 'String$', 'Node'].includes(v.constructor.name) ? v.value : v
-
+    null === v ? v :
+    'object' !== typeof v ? v :
+     v.constructor && ['Bin$', 'Object$', 'Array$', 'String$', 'Node'].includes(v.constructor.name) ? v.value : v
 
 const values = a => a.map(v => value(v))
 
@@ -43,6 +73,16 @@ const copy = v =>
     v instanceof Array$ ? new Array$(v.value)  :
     Array.isArray(v)    ? Object.assign([], v) :
     __.isObject(v)      ? Object.assign({}, v) : v
+
+const camelize = v =>
+    v.includes('-') ? v.replace( /-([a-z])/g, (_, $1) => $1.toUpperCase() ) : v
+
+const dasherize = v =>
+    v.replace( /([A-Z])/g,  $1 => '-' + $1.toLowerCase() )
+
+const object$ = (...v) => new Object$(...v)
+const array$ = (...v) => new Array$(...v)
+const string$ = (...v) => new String$(...v)
 
 const __carry = (self, f, ...v) => {
     if (! __.isFunction(f)) return f
@@ -251,17 +291,17 @@ class Bin$ extends Object {
     // to (...v)        { return setTo(this, v, 'value')  } should be this.to('flag', true)
     // flagTo (...v)    { return setTo(this, v, 'flag')   } // .setTo('flag', true)
     // resultTo (...v)  { return setTo(this, v, 'result') } // .setTo('result', 1) .setTo({}, 'a', 100)
-    switch (v) { return this.setIn('flag', v) }
-    setResult (v)  { return this.setIn('result', v) }
-    is (v)   { return this.switch( is(this.value, v) ) }
-    type (v) { return this.switch( v ? this.$.type === v : this.$.type ) }
+    switch (v)  { return this.setIn('flag', v) }
+    outcome (v) { return this.setIn('result', v) }
+    is (v)      { return this.switch( is(this.value, v) ) }
+    type (v)    { return this.switch( v ? this.$.type === v : this.$.type ) }
     case (f)    { return __if(this, f, 'result') }
     log (...f)  { return __log(this, ...f)  }
-    drop ()     { return this }
+    noop ()     { return this }
     // carry (f, ...v)     { return __carry(this, f, ...v) }
     // openCarry (f, ...v) { return __run(this, f, ...v)   }
     // prop (...p) { return __prop(this, ...p) }
-    // setProp (p, v) { return this.drop( this.$[p] = v ) }
+    // setProp (p, v) { return this.noop( this.$[p] = v ) }
     error (p, ...v) {
         console.log(p, ...v)
         return this  }
@@ -290,31 +330,31 @@ class Bin$ extends Object {
     // return (...args)    { return this.take(...args).result }
 
     thru    (...args) { return this.from( duct(...args, this.value) ) }
-    tap     (...args) { return this.drop( duct(...args, this.value) ) }
+    tap     (...args) { return this.noop( duct(...args, this.value) ) }
     if      (...args) { return this.switch( duct(...args, this.value) ) }
-    takeOff (...args) { return this.setResult( duct(...args, this.value) ) }
+    takeOff (...args) { return this.outcome( duct(...args, this.value) ) }
     self        (...args) { return this.from( duct(...args, this) ) }
-    selfTap     (...args) { return this.drop( duct(...args, this) ) }
+    selfTap     (...args) { return this.noop( duct(...args, this) ) }
     selfIf      (...args) { return this.switch( duct(...args, this) ) }
-    selfTakeOff (...args) { return this.setResult( duct(...args, this) ) }
+    selfTakeOff (...args) { return this.outcome( duct(...args, this) ) }
 
     thenThru   (...args) { return this.flag ? this.from( duct(...args, this.value) ) : this }
-    thenTap    (...args) { return this.flag ? this.drop( duct(...args, this.value) ) : this }
+    thenTap    (...args) { return this.flag ? this.noop( duct(...args, this.value) ) : this }
     thenIf     (...args) { return this.flag ? this.switch( duct(...args, this.value) ) : this }
-    then       (...args) { return this.flag ? this.setResult( duct(...args, this.value) ) : this }
+    then       (...args) { return this.flag ? this.outcome( duct(...args, this.value) ) : this }
     thenSelfThru   (...args) { return this.flag ? this.from( duct(...args, this) ) : this }
-    thenSelfTap    (...args) { return this.flag ? this.drop( duct(...args, this) ) : this }
+    thenSelfTap    (...args) { return this.flag ? this.noop( duct(...args, this) ) : this }
     thenSelfIf     (...args) { return this.flag ? this.switch( duct(...args, this) ) : this }
-    thenSelf       (...args) { return this.flag ? this.setResult( duct(...args, this) ) : this }
+    thenSelf       (...args) { return this.flag ? this.outcome( duct(...args, this) ) : this }
 
     elseThru   (...args) { return ! this.flag ? this.from( duct(...args, this.value) ) : this }
-    elseTap    (...args) { return ! this.flag ? this.drop( duct(...args, this.value) ) : this }
+    elseTap    (...args) { return ! this.flag ? this.noop( duct(...args, this.value) ) : this }
     elseIf     (...args) { return ! this.flag ? this.switch( duct(...args, this.value) ) : this }
-    else       (...args) { return ! this.flag ? this.setResult( duct(...args, this.value) ) : this }
+    else       (...args) { return ! this.flag ? this.outcome( duct(...args, this.value) ) : this }
     elseSelfThru   (...args) { return ! this.flag ? this.from( duct(...args, this) ) : this }
-    elseSelfTap    (...args) { return ! this.flag ? this.drop( duct(...args, this) ) : this }
+    elseSelfTap    (...args) { return ! this.flag ? this.noop( duct(...args, this) ) : this }
     elseSelfIf     (...args) { return ! this.flag ? this.switch( duct(...args, this) ) : this }
-    elseSelf       (...args) { return ! this.flag ? this.setResult( duct(...args, this) ) : this }
+    elseSelf       (...args) { return ! this.flag ? this.outcome( duct(...args, this) ) : this }
 
     over (...a)   { return this.self( ...a ) }
     tapOver(...a) { return this.selfTap(...a) }
@@ -335,7 +375,7 @@ class Bin$ extends Object {
         return this  }
     remove (k)  { return this.save(k).delete(k) }
     restore (k) { return this.setAt( k, this.$.store[k] ) }
-    save (k)    { return this.drop( this.$.store[k] = this.at(k) ) }
+    save (k)    { return this.noop( this.$.store[k] = this.at(k) ) }
 
     add (...o)  { return __add(this, ...o) }  // recursive assign
 
@@ -381,7 +421,7 @@ class Bin$ extends Object {
         return this  }
     // setDefault (key, value) { return this.setWhen(key, value) }
     // if(v=>v.at('ok')) ('ok', 10, v=>v.type('object').flag)
-    // setResult (v) { return this.drop( result.set(this, v) ) }
+    // outcome (v) { return this.noop( result.set(this, v) ) }
     get (...key) {
         // key.length > 3 & console.log(0, object.get(this))
         let k = this.value[ key[0] ]
@@ -505,6 +545,10 @@ class Bin$ extends Object {
     set flag (v)   { flag.set(this, v)    }
 }
 
+Bin$.prototype.toCSS = function () {
+    let declarations = o => new Object$(o).reduce((a,v,k) => a += [k, ':', v, ';\n'].join(''), '')
+    return this.reduce((a,v,k) => a += [k, ' {\n', declarations(v) ,'}', '\n'].join(''), '')
+}
 
 
 class Object$ extends Object {
@@ -705,15 +749,47 @@ const ductMethod = (name, method, func) =>
 
 class Node extends Bin$ {  // HtmlElement
     constructor (arg) { super(arg) }
+    hasClassName (name) {
+        return this.switch( new RegExp("(?:^|\\s+)" + name + "(?:\\s+|$)").test(this.className) )
+    }
+    addClassName (name) {
+        if (!this.hasClassName(name).flag)
+            this.className = this.className ? [this.className, name].join(' ') : name
+        return this
+    }
+    removeClassName (name) {
+        if (this.hasClassName(name))
+            this.className = this.className.replace(new RegExp("(?:^|\\s+)" + name + "(?:\\s+|$)", "g"), "")
+        return this
+    }
+    get className () {
+        return this.value.className
+    }
+    set className (name) {
+        this.value.className = name
+    }
 }
 
 ;['appendChild', 'addEventListener'].forEach( v =>
     Node.prototype[v] = function (...x) {
         return this.switch( this.value[v](...values(x)) )  })
+;['setAttribute'].forEach( v =>
+    Node.prototype[v] = function (...x) {
+        return this.noop( this.value[v](...values(x)) )  })
 
-let getNode = v =>
-    '#' === v[0] ? new Node(document.getElementById(v)) :
-    /^[a-z]$/i.test(v[0]) ? new Node(document.getElementsByTagName(v)[0]) : undefined
+const getNode = v =>
+    '#' === v[0] ? new Node(document.getElementById(v.slice(1))) :
+    '.' === v[0] ? new Node(document.getElementsByClassName(v.slice(1))[0]) :
+    /^[a-z]$/i.test(v[0]) ? new Node(document.getElementsByTagName(v)[0]) : new Bin$(undefined)
+
+const getNodeById = v => new Node(document.getElementById(v))
+
+const getNodes = v =>
+    '.' === v[0] ? new Node(document.getElementsByClassName(v)) :
+    /^[a-z]$/i.test(v[0]) ? new Node(document.getElementsByTagName(v)[0]) : new Bin$(undefined)
+
+
+const createNode = v => new Node(document.createElement(v))
 
 const xmlObject = o => {
     let value = {}
@@ -753,10 +829,10 @@ class Xml extends Bin$ {
         super(arg)
         this.$.root = from( stepIn(this.value) )
     }
-    root (p)     { return this.drop( this.$.root = from( findRoot(this.value, p)[0] ) ) }
-    insert (obj) { return this.drop( this.$.root.assign( xmlObject(obj) ) ) }
-    removeElement (p)  { return this.drop( this.$.root.remove(p) )  }
-    restoreElement (p) { return this.drop( this.$.root.restore(p) ) }
+    root (p)     { return this.noop( this.$.root = from( findRoot(this.value, p)[0] ) ) }
+    insert (obj) { return this.noop( this.$.root.assign( xmlObject(obj) ) ) }
+    removeElement (p)  { return this.noop( this.$.root.remove(p) )  }
+    restoreElement (p) { return this.noop( this.$.root.restore(p) ) }
     findEvery (p, f) {
         const element = (o, prop) => {
             for (let i = 0; i < o.length; i++) {
@@ -975,7 +1051,7 @@ class Template extends Array$ {
             Blaze.With(()=>cube.lookup(this.view, lookup), ()=>f(new Template(this.view)) )  ])
     }
     include (name, ...a) { return this.append([ // append because push returns number of element not this.
-        __.isUndefined(a)
+        'undefined' === typeof a // __.isUndefined(a)
                      ? cube.include(this.view, name) :
         a.length === 1 && __.isBlazeElement(a[0])
                      ? cube.includeBlock(this.view, name, ()=>a) :
@@ -989,14 +1065,7 @@ class Template extends Array$ {
     get view () { return property.get(this).view }
 }
 
-let define = (name, f) => Template.prototype[name] = function (...v) {
-    return f(this, ...v)
-}
 
-let mixin = (name, f) => __.Mixin(name, f)
-// I will clean up when I have time.
-
-const htmlTags = 'a abbr acronym address applet area article aside audio b base basefont bdi bdo big blockquote body br button canvas caption center cite code col colgroup command data datagrid datalist dd del details dfn dir div dl dt em embed eventsource fieldset figcaption figure font footer form frame frameset h1 h2 h3 h4 h5 h6 head header hgroup hr html i iframe img input ins isindex kbd keygen label legend li link main map mark menu meta meter nav noframes noscript object ol optgroup option output p param pre progress q rp rt ruby s samp script section select small source span strike strong style sub summary sup table tbody td textarea tfoot th thead time title tr track tt u ul var video wbr'.toUpperCase().split(' ')
 let attributeClass = (key, value) => __.isString(value) ? value.replace(/\*/g, __.key2class(key)) : __.key2class(key)
   // *-ok *-good
 const htmlEntities = { '123': '{', '125': '}' }
@@ -1008,6 +1077,7 @@ let mustacheAttr = (v, f, _) =>
   __.isEmpty(v) ? '' :
   __.isArray(v) ? () => v :
   __.isFunction(v) ? v( new Template(_) ) :
+  __.isEnclosedBy(v, '{{', '}}') ? v :
   __.isEnclosedBy(v, '{', '}') ? v.split(/[{}]/).map( (v, i) => i % 2 === 1 ? f(v) : displayValue(v) ).filter( (v) => v ) :
     displayValue(v)
 
@@ -1027,14 +1097,100 @@ let blazeAttrs = (view, fo) =>
     new Bin$(fo).reduce(((a, v, k) =>
           a.set(from(k).dasherize().value, mustacheAttr(v, cube.lookupInAttr.bind(null, view), view) ) ), new Bin$({}) ).value
 
-htmlTags.forEach(tag => Template.prototype[tag] = function(...arr) {
-    return this.append(
-        [ 0 === arr.length ? HTML[tag]() :
-            HTML[tag](
-                ...arr.into$.reduceFn( (a,v) =>  a.append(
-                [mustacheAttr(v, cube.lookupInView.bind(null, this.view), this.view)]),
-                w=>__.isBlazeAttr(w[0]) ? [ blazeAttrs(this.view, w.shift()) ].into$ : [].into$ ).value )  ]  )  })
+if ('undefined' !== typeof HTML) {
+    HTML.knownElementNames
+    .forEach(element => Template.prototype[element.toUpperCase()] = function(...arr) {
+        return this.append(
+            [ 0 === arr.length ? HTML[HTML.getSymbolName(element)]() :
+                HTML[HTML.getSymbolName(element)](
+                    ...array$(arr).reduceFn( (a,v) =>  a.append(
+                    [mustacheAttr(v, cube.lookupInView.bind(null, this.view), this.view)]),
+                    w=>__.isBlazeAttr(w[0]) ? array$([ blazeAttrs(this.view, w.shift()) ]) : array$([]) ).value )  ]  )  })
 
+    ;('md-item-template md-not-found ui-view ' +
+    'md-autocomplete md-autofocus md-button ' +
+    'md-calendar md-card md-checkbox md-chip md-chip-remove md-chips md-colors md-contact-chips md-content ' +
+    'md-datepicker md-dialog md-divider md-fab-actions md-fab-speed-dial md-fab-toolbar md-grid-list md-grid-tile md-highlight-text ' +
+    'md-icon md-ink-ripple md-input md-input-container md-list md-list-item md-menu md-menu-bar md-nav-bar md-nav-item ' +
+    'md-progress-circular md-progress-linear md-radio-button md-radio-group ' +
+    'md-select md-select-on-focus md-sidenav md-sidenav-focus md-slider md-slider-container md-subheader ' +
+    'md-swipe-down md-swipe-left md-swipe-right md-swipe-up md-switch ' +
+    'md-tab md-tabs md-toolbar md-tooltip md-truncate md-virtual-repeat md-virtual-repeat-container md-whiteframe').split(/\s+/)
+    .forEach(element => {
+        HTML.getTag(element)
+        Template.prototype[camelize(element)] = function(...arr) {
+            return this.append(
+                [ 0 === arr.length ? HTML[HTML.getSymbolName(element)]() :
+                    HTML[HTML.getSymbolName(element)](
+                        ...array$(arr).reduceFn( (a,v) =>  a.append(
+                        [mustacheAttr(v, cube.lookupInView.bind(null, this.view), this.view)]),
+                        w=>__.isBlazeAttr(w[0]) ? array$([ blazeAttrs(this.view, w.shift()) ]) : array$([]) ).value )  ]  )  }  })
+
+    HTML.ToHTMLVisitor.prototype.visitTag = function (tag) {
+        var attrStrs = [];
+
+        var tagName = tag.tagName;
+        var children = tag.children;
+
+        var attrs = tag.attrs;
+        if (attrs) {
+          attrs = HTML.flattenAttributes(attrs);
+          for (var k in attrs) {
+            if (k === 'value' && tagName === 'textarea') {
+              children = [attrs[k], children];
+            } else {
+              if ('' === attrs[k])
+                attrStrs.push(' ' + k)
+              else {
+                var v = this.toText(attrs[k], HTML.TEXTMODE.ATTRIBUTE);
+                attrStrs.push(' ' + k + '="' + v + '"');
+              }
+            }
+          }
+        }
+
+        var startTag = '<' + tagName + attrStrs.join('') + '>';
+
+        var childStrs = [];
+        var content;
+        if (tagName === 'textarea') {
+
+          for (var i = 0; i < children.length; i++)
+            childStrs.push(this.toText(children[i], HTML.TEXTMODE.RCDATA));
+
+          content = childStrs.join('');
+          if (content.slice(0, 1) === '\n')
+            // TEXTAREA will absorb a newline, so if we see one, add
+            // another one.
+            content = '\n' + content;
+
+        } else {
+          for (var i = 0; i < children.length; i++)
+            childStrs.push(this.visit(children[i]));
+
+          content = childStrs.join('');
+        }
+
+        var result = startTag + content;
+
+        if (children.length || ! HTML.isVoidElement(tagName)) {
+          // "Void" elements like BR are the only ones that don't get a close
+          // tag in HTML5.  They shouldn't have contents, either, so we could
+          // throw an error upon seeing contents here.
+          result += '</' + tagName + '>';
+        }
+
+        return result
+    }
+}
+
+
+let define = (name, f) => Template.prototype[name] = function (...v) {
+    return f(this, ...v)
+}
+
+let mixin = (name, f) => __.Mixin(name, f)
+// I will clean up when I have time.
 
 class Function$ extends Function {
     constructor (v, bin) {
@@ -1063,14 +1219,11 @@ class String$ extends String {
         cashProp(this, '$').reactives({
             type: 'string'
           , bin:   bin  })  }
-    camelize ()  {
-        return this.replace( /-([a-z])/g, (_, $1) => $1.toUpperCase() ) }
-    dasherize () {
-        return this.replace( /([A-Z])/g,  $1 => '-' + $1.toLowerCase() ) }
+    camelize ()  { return camelize(this.value) }
+    dasherize () { return dasherize(this.value) }
     get value () { return this.valueOf()  }
 }
 
-let string = v => new String$(v)
 
 
 class Number$ extends Number {
@@ -1178,48 +1331,47 @@ from({
     array:    ['sync', 'reload', 'print']
 }).forEach( (v,k)=>
     v.forEach( w => Bin$.prototype[w] = function (...x) {
-        return this.drop( this[k][w](...x) )  })  )
+        return this.noop( this[k][w](...x) )  })  )
 
 // excute the function put result *switch* to evaluate condition: x.result
 from({
     array: ['push', 'pop', 'shift', 'unshift', 'splice', 'append']
 }).forEach( (v,k)=>
     v.forEach( w => Bin$.prototype[w] = function (...x) {
-        return this.switch( this[k][w](...x) )  })  )
+        return this.outcome( this[k][w](...x) )  })  )
 
 
-
-let prop = 'into$'
-if (prop) {
-    Object.defineProperty(  Object.prototype,   prop, {
-        enumerable:   false
-      , configurable: true
-      , get: function () { return new Bin$  (this, 'object') }  })
-    Object.defineProperty(  Function.prototype, prop, {
-        enumerable:   false
-      , configurable: true
-      , get: function () { return new Bin$  (this, 'function') }  })
-    Object.defineProperty(  String.prototype,   prop, {
-        enumerable:   false
-      , configurable: true
-      , get: function () { return new Bin$  (this, 'string') }  })
-    Object.defineProperty(  Array.prototype,    prop, {
-        enumerable:   false
-      , configurable: true
-      , get: function () { return new Array$   (this) }  })
-    Object.defineProperty(  Date.prototype,     prop, {
-        enumerable:   false
-      , configurable: true
-      , get: function () { return new Bin$  (this, 'date'  ) }  })
-    Object.defineProperty(  Number.prototype,   prop, {
-        enumerable:   false
-      , configurable: true
-      , get: function () { return new Bin$  (this, 'number') }  })
-    Object.defineProperty(  Boolean.prototype,  prop, {
-        enumerable:   false
-      , configurable: true
-      , get: function () { return new Bin$  (this, 'primitive') }  })
-}
+// let prop = 'into$'
+// if (prop) {
+//     Object.defineProperty(  Object.prototype,   prop, {
+//         enumerable:   false
+//       , configurable: true
+//       , get: function () { return new Bin$  (this, 'object') }  })
+//     Object.defineProperty(  Function.prototype, prop, {
+//         enumerable:   false
+//       , configurable: true
+//       , get: function () { return new Bin$  (this, 'function') }  })
+//     Object.defineProperty(  String.prototype,   prop, {
+//         enumerable:   false
+//       , configurable: true
+//       , get: function () { return new Bin$  (this, 'string') }  })
+//     Object.defineProperty(  Array.prototype,    prop, {
+//         enumerable:   false
+//       , configurable: true
+//       , get: function () { return new Array$   (this) }  })
+//     Object.defineProperty(  Date.prototype,     prop, {
+//         enumerable:   false
+//       , configurable: true
+//       , get: function () { return new Bin$  (this, 'date'  ) }  })
+//     Object.defineProperty(  Number.prototype,   prop, {
+//         enumerable:   false
+//       , configurable: true
+//       , get: function () { return new Bin$  (this, 'number') }  })
+//     Object.defineProperty(  Boolean.prototype,  prop, {
+//         enumerable:   false
+//       , configurable: true
+//       , get: function () { return new Bin$  (this, 'primitive') }  })
+// }
 
 
 let exported = Object.assign(from, {
@@ -1242,23 +1394,28 @@ let exported = Object.assign(from, {
   , bin:      (v, type) => new Bin$(v, type)
   , function:  v => new Function$(v)
   , date:      v => new Date$(v)
-  , object:    v => new Object$(v)
-  , array:     v => new Array$(v)   // range(1,20) (2,20,3)
-  , string:    string
+  , object:    object$
+  , array:     array$    // range(1,20) (2,20,3)
+  , string:    string$
   , number:    v => new Number$(v)
   , primitive: v => new Primitive(v)
   , module:    (...v) => __.Module(...v)
   , css:       o => __.CSS(o)
   // , _color:     (...v) => new Color(...v)
+  , Template:  Template
   , template:   (v, name) => new Template(v, name)
   , htmlElement: v => new Node(v) // remove only map.js use it
   , node:        v => new Node(v)
   , createNode:  v => new Node(document.createElement(v))
   , getNode:     v => getNode(v)
+  , getNodeById: v => getNodeById(v)
+  , createNode:  v => createNode(v)
   , color:  color
   , strip:  strip
   , ductMethod: ductMethod
   , is:     is
+  , camelize: camelize
+  , dasherize: dasherize
   // , range:     range
   // , IncredifyProperty: augument
   // , fileFrom('hello')
@@ -1287,23 +1444,6 @@ function isTypeof (arg, typeString, type) {
     return  (typeString === type || undefined === type) &&
         (typeString === typeof arg || types[typeString].map(v => arg instanceof v).some(v => v) ) }
 
-
-__.t     = (v, t) => 'function' === typeof t ? (v === t ? t() : t(v)) : 'undefined' === typeof t ? true  : t
-__.f     = (v, f) => 'function' === typeof f ? (v === f ? f() : f(v)) : 'undefined' === typeof f ? false : f
-__.isTrue  = (v, t) => { v && __.t(v, t); return !!v === true  }
-__.isFalse = (v, f) => { v || __.f(v, f); return !!v === false }
-__.isIt  = (v, it, t, f) => it ? (__.t(v, t) || true) : (__.f(v, f) && false)
-__.isFunction   = (v, t, f) => __.isIt(v, 'function'  === typeof v, t, f)
-__.isUndefined  = (v, t, f) => __.isIt(v, 'undefined' === typeof v, t, f)
-__.isString     = (v, t, f) => __.isIt(v, 'string'    === typeof v, t, f)
-__.isNumber     = (v, t, f) => __.isIt(v, ! isNaN(v) && 'number' === typeof v, t, f)
-__.isBoolean    = (v, t, f) => __.isIt(v, 'boolean'   === typeof v, t, f)
-__.isDate       = (v, t, f) => __.isIt(v, v instanceof Date, t, f)
-__.isScalar     = (v, t, f) => __.isIt(v, __.isNumber(v) || __.isString(v) || __.isBoolean(v), t, f)
-__.isArray      = (v, t, f) => __.isIt(v, '[object Array]'     === Object.prototype.toString.call(v), t, f)
-__.isObject     = (v, t, f) => __.isIt(v, '[object Object]'    === Object.prototype.toString.call(v), t, f)
-__.isArguments  = (v, t, f) => __.isIt(v, '[object Arguments]' === Object.prototype.toString.call(v), t, f)
-__.isArrayLike  = (v, t, f) => __.isIt(v, __.isArray(v) || __.isArguments(v), t, f)
 
 function type (v, type) {
     if (v === null || Object.is(v, NaN)) return 'value' === type // typeof null is 'object', NaN !== NaN
